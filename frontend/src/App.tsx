@@ -4,7 +4,10 @@ import { AnimatePresence, motion } from 'framer-motion';
 import { toast } from 'sonner';
 
 import { getCurrentUser } from '@/services/api/auth';
+import { getProfile } from '@/services/api/profile';
 import { useAuthStore } from '@/store/auth-store';
+import { useProfileStore } from '@/store/profile-store';
+import { ProfileCompletionGuard } from '@/components/layout/ProfileCompletionGuard';
 
 import { AuthPage } from './pages/auth-page';
 import { DashboardLayout } from './pages/dashboard-layout';
@@ -13,7 +16,6 @@ import { LandingPage } from './pages/landing-page';
 import { InteractionsPage } from './pages/interactions-page';
 import { MedicineSearchPage } from './pages/medicine-search-page';
 import { OverviewPage } from './pages/overview-page';
-import { PregnancySafetyPage } from './pages/pregnancy-safety-page';
 import { ProfilePage } from './pages/profile-page';
 import { SymptomsPage } from './pages/symptoms-page';
 import { AdminPage } from './pages/admin-page';
@@ -22,6 +24,7 @@ function AuthBootstrap() {
   // Run hydration only once on mount — not on every token change.
   // Depending on accessToken would cause a re-run whenever clearSession fires.
   const { accessToken, refreshToken, authReady, setUser, clearSession, setAuthReady } = useAuthStore();
+  const { setProfile, setProfileLoaded } = useProfileStore();
   const didHydrate = useRef(false);
 
   useEffect(() => {
@@ -30,12 +33,17 @@ function AuthBootstrap() {
 
     if (!accessToken && !refreshToken) {
       setAuthReady(true);
+      setProfileLoaded(true);
       return;
     }
 
     let mounted = true;
 
     async function hydrate() {
+      // ── Step 1: Restore authenticated user ──────────────────────────
+      // setAuthReady MUST fire here regardless of profile fetch status.
+      // Keeping it in its own finally block prevents the profile fetch
+      // from blocking the auth-ready signal (which caused infinite spinner).
       try {
         const user = await getCurrentUser();
         if (mounted) setUser(user);
@@ -46,6 +54,19 @@ function AuthBootstrap() {
         }
       } finally {
         if (mounted) setAuthReady(true);
+      }
+
+      // ── Step 2: Fetch profile (non-blocking for auth) ────────────────
+      // Runs after auth is settled. ProfileCompletionGuard shows its own
+      // spinner while profileLoaded is false.
+      if (!mounted) return;
+      try {
+        const profile = await getProfile();
+        if (mounted) setProfile(profile);
+      } catch {
+        if (mounted) setProfile(null);
+      } finally {
+        if (mounted) setProfileLoaded(true);
       }
     }
 
@@ -134,10 +155,30 @@ function RouteTransitions() {
             }
           >
             <Route index element={<OverviewPage />} />
-            <Route path="medicines" element={<MedicineSearchPage />} />
-            <Route path="symptoms" element={<SymptomsPage />} />
-            <Route path="interactions" element={<InteractionsPage />} />
-            <Route path="pregnancy" element={<PregnancySafetyPage />} />
+            <Route
+              path="medicines"
+              element={
+                <ProfileCompletionGuard>
+                  <MedicineSearchPage />
+                </ProfileCompletionGuard>
+              }
+            />
+            <Route
+              path="symptoms"
+              element={
+                <ProfileCompletionGuard>
+                  <SymptomsPage />
+                </ProfileCompletionGuard>
+              }
+            />
+            <Route
+              path="interactions"
+              element={
+                <ProfileCompletionGuard>
+                  <InteractionsPage />
+                </ProfileCompletionGuard>
+              }
+            />
             <Route path="profile" element={<ProfilePage />} />
             <Route path="history" element={<HistoryPage />} />
             <Route

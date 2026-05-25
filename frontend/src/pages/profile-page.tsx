@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect } from 'react';
 import { useForm } from 'react-hook-form';
 import { CheckCircle2, UserRound } from 'lucide-react';
 import { toast } from 'sonner';
@@ -13,34 +13,58 @@ import { Textarea } from '@/components/ui/textarea';
 import { addHistoryItem } from '@/lib/history';
 import { getApiErrorMessage } from '@/services/api/client';
 import { getProfile, updateProfile } from '@/services/api/profile';
+import { useAuthStore } from '@/store/auth-store';
+import { useProfileStore } from '@/store/profile-store';
 import type { HealthProfile } from '@/types/api';
 
 export function ProfilePage() {
-  const form = useForm<HealthProfile>({ defaultValues: { gender: 'female', is_pregnant: false, is_lactating: false } as HealthProfile });
-  const [profile, setProfile] = useState<HealthProfile | null>(null);
+  const user = useAuthStore((state) => state.user);
+  const { setProfile } = useProfileStore();
+
+  const form = useForm<HealthProfile>({
+    defaultValues: {
+      gender: '',
+      is_pregnant: false,
+      is_lactating: false,
+    } as HealthProfile,
+  });
+
+  // Watch gender to conditionally show female-only fields
+  const gender = form.watch('gender');
+  const isFemale = gender?.toLowerCase() === 'female';
 
   useEffect(() => {
     async function loadProfile() {
       try {
-        const currentProfile = await getProfile();
-        if (currentProfile) {
-          setProfile(currentProfile);
-          form.reset(currentProfile);
+        const current = await getProfile();
+        if (current) {
+          form.reset(current);
         }
       } catch {
-        // No profile yet; the form remains ready for input.
+        // No profile yet — form remains empty and ready for first-time input.
       }
     }
-
     loadProfile();
   }, [form]);
 
   async function handleSave(values: HealthProfile) {
+    // Clear pregnancy/lactation flags when gender is not female
+    const payload = {
+      ...values,
+      is_pregnant: isFemale ? values.is_pregnant : false,
+      is_lactating: isFemale ? values.is_lactating : false,
+    };
+
     try {
-      const saved = await updateProfile(values);
-      setProfile(saved);
+      const saved = await updateProfile(payload);
       form.reset(saved);
-      addHistoryItem({ kind: 'profile', title: 'Profile updated', detail: 'Saved safety context and demographic data.' });
+      // Push to central profile store so the guard reflects the new state immediately
+      setProfile(saved);
+      addHistoryItem({
+        kind: 'profile',
+        title: 'Profile updated',
+        detail: 'Saved health profile and demographic data.',
+      });
       toast.success('Profile saved.');
     } catch (error) {
       toast.error(getApiErrorMessage(error));
@@ -48,102 +72,145 @@ export function ProfilePage() {
   }
 
   return (
-    <div className="space-y-8">
-      <section className="grid gap-6 xl:grid-cols-[1fr_0.85fr]">
+    <div className="space-y-6">
+      <section>
+        {/* ── Profile Form ─────────────────────────────────────────── */}
         <Card className="border-teal-100 bg-gradient-to-br from-teal-50 via-white to-cyan-50">
-          <CardHeader>
+          <CardHeader className="pb-4">
             <Badge variant="soft" className="w-fit gap-2 px-3 py-2 text-sm">
               <UserRound className="h-4 w-4" />
               Profile settings
             </Badge>
-            <CardTitle className="mt-3 text-4xl">Maintain a clean health profile for better safety checks.</CardTitle>
-            <CardDescription className="max-w-2xl text-base leading-7">
-              Save allergies, medications, pregnancy context, and notes. The profile is used by the interaction and pregnancy workflows.
+            <CardTitle className="mt-3 text-3xl">
+              Maintain your health profile for personalized safety checks.
+            </CardTitle>
+            <CardDescription className="max-w-3xl text-sm leading-6 mt-2">
+              Complete required fields to unlock personalized medicine safety analysis, interaction checks, and tailored recommendations.
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <form className="space-y-4" onSubmit={form.handleSubmit(handleSave)}>
+            <form className="space-y-3" onSubmit={form.handleSubmit(handleSave)}>
+              {/* Name — read-only, sourced from auth user */}
+              <div className="space-y-2">
+                <Label>Full name</Label>
+                <div className="flex h-10 w-full items-center rounded-xl border border-border/70 bg-white/80 px-3 text-sm text-slate-700">
+                  {user?.full_name ?? (
+                    <span className="text-muted-foreground">
+                      Name is set during registration and cannot be changed here.
+                    </span>
+                  )}
+                </div>
+              </div>
+
               <div className="grid gap-4 sm:grid-cols-2">
                 <div className="space-y-2">
-                  <Label htmlFor="profile-age">Age</Label>
-                  <Input id="profile-age" type="number" {...form.register('age', { valueAsNumber: true })} />
+                  <Label htmlFor="profile-age">
+                    Age <span className="text-rose-500">*</span>
+                  </Label>
+                  <Input
+                    id="profile-age"
+                    type="number"
+                    min={0}
+                    max={130}
+                    placeholder="e.g. 28"
+                    {...form.register('age', { valueAsNumber: true })}
+                  />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="profile-gender">Gender</Label>
-                  <Input id="profile-gender" placeholder="female" {...form.register('gender')} />
+                  <Label htmlFor="profile-gender">
+                    Gender <span className="text-rose-500">*</span>
+                  </Label>
+                  <select
+                    id="profile-gender"
+                    className="flex h-10 w-full rounded-xl border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                    {...form.register('gender')}
+                  >
+                    <option value="">Select gender</option>
+                    <option value="male">Male</option>
+                    <option value="female">Female</option>
+                    <option value="other">Other / Prefer not to say</option>
+                  </select>
                 </div>
-                <div className="space-y-2">
-                  <Label htmlFor="profile-weight">Weight (kg)</Label>
-                  <Input id="profile-weight" type="number" step="0.1" {...form.register('weight_kg', { valueAsNumber: true })} />
+              </div>
+
+              {/* Female-only fields */}
+              {isFemale && (
+                <div className="grid gap-2.5 sm:grid-cols-2">
+                  <label className="flex cursor-pointer items-center gap-2.5 rounded-2xl border border-border/70 bg-white p-2.5 text-xs text-slate-700 transition hover:bg-teal-50/40">
+                    <Checkbox {...form.register('is_pregnant')} />
+                    Pregnant
+                  </label>
+                  <label className="flex cursor-pointer items-center gap-2.5 rounded-2xl border border-border/70 bg-white p-2.5 text-xs text-slate-700 transition hover:bg-teal-50/40">
+                    <Checkbox {...form.register('is_lactating')} />
+                    Lactating / Breastfeeding
+                  </label>
                 </div>
-                <div className="space-y-2">
-                  <Label htmlFor="profile-medications">Current medications</Label>
-                  <Input id="profile-medications" placeholder="Metformin, Vitamin D" {...form.register('current_medications')} />
-                </div>
+              )}
+
+              <div className="space-y-2">
+                <Label htmlFor="profile-allergies">
+                  Allergies <span className="text-rose-500">*</span>
+                </Label>
+                <Textarea
+                  id="profile-allergies"
+                  rows={2}
+                  placeholder='e.g. Penicillin, peanuts — or type "None" if none'
+                  {...form.register('allergies')}
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="profile-conditions">
+                  Medical conditions <span className="text-rose-500">*</span>
+                </Label>
+                <Textarea
+                  id="profile-conditions"
+                  rows={2}
+                  placeholder='e.g. Hypertension, diabetes — or type "None" if none'
+                  {...form.register('medical_conditions')}
+                />
               </div>
 
               <div className="grid gap-3 sm:grid-cols-2">
-                <label className="flex items-center gap-3 rounded-2xl border border-border/70 bg-white p-3 text-sm text-slate-700">
-                  <Checkbox {...form.register('is_pregnant')} />
-                  Pregnant
-                </label>
-                <label className="flex items-center gap-3 rounded-2xl border border-border/70 bg-white p-3 text-sm text-slate-700">
-                  <Checkbox {...form.register('is_lactating')} />
-                  Lactating
-                </label>
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="profile-allergies">Allergies</Label>
-                <Textarea id="profile-allergies" rows={3} placeholder="Penicillin, peanuts" {...form.register('allergies')} />
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="profile-conditions">Medical conditions</Label>
-                <Textarea id="profile-conditions" rows={3} placeholder="Hypertension, diabetes" {...form.register('medical_conditions')} />
+                <div className="space-y-2">
+                  <Label htmlFor="profile-weight">Weight (kg)</Label>
+                  <Input
+                    id="profile-weight"
+                    type="number"
+                    step="0.1"
+                    placeholder="e.g. 65.5"
+                    {...form.register('weight_kg', { valueAsNumber: true })}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="profile-medications">Current medications</Label>
+                  <Input
+                    id="profile-medications"
+                    placeholder="e.g. Metformin, Vitamin D"
+                    {...form.register('current_medications')}
+                  />
+                </div>
               </div>
 
               <div className="space-y-2">
                 <Label htmlFor="profile-notes">Notes</Label>
-                <Textarea id="profile-notes" rows={4} placeholder="Additional context for medicine safety checks" {...form.register('notes')} />
+                <Textarea
+                  id="profile-notes"
+                  rows={2}
+                  placeholder="Additional context or allergic reactions"
+                  {...form.register('notes')}
+                />
               </div>
+
+              <p className="text-xs text-slate-600">
+                Fields marked <span className="font-semibold text-rose-500">*</span> are required for full feature access.
+              </p>
 
               <Button type="submit" className="w-full">
                 <CheckCircle2 className="h-4 w-4" />
                 Save profile
               </Button>
             </form>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle>Current snapshot</CardTitle>
-            <CardDescription>What the backend will use when the profile-aware checks run.</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="grid gap-3">
-              {profile ? (
-                [
-                  { label: 'Age', value: profile.age ?? 'Not set' },
-                  { label: 'Gender', value: profile.gender ?? 'Not set' },
-                  { label: 'Pregnant', value: profile.is_pregnant ? 'Yes' : 'No' },
-                  { label: 'Lactating', value: profile.is_lactating ? 'Yes' : 'No' },
-                  { label: 'Allergies', value: profile.allergies ?? 'None listed' },
-                  { label: 'Conditions', value: profile.medical_conditions ?? 'None listed' },
-                ].map((item) => (
-                  <div key={item.label} className="rounded-3xl border border-border/70 bg-white p-4">
-                    <p className="text-xs font-semibold uppercase tracking-[0.24em] text-teal-700">{item.label}</p>
-                    <p className="mt-2 text-sm font-semibold text-slate-950">{item.value}</p>
-                  </div>
-                ))
-              ) : (
-                <div className="rounded-3xl border border-dashed border-border/80 bg-muted/30 p-8 text-center">
-                  <p className="text-base font-semibold text-slate-950">No profile saved yet</p>
-                  <p className="mt-2 text-sm text-muted-foreground">Fill out the form to unlock profile-aware safety warnings.</p>
-                </div>
-              )}
-            </div>
           </CardContent>
         </Card>
       </section>

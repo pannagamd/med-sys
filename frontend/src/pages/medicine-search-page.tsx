@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { z } from 'zod';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { ArrowRight, CopyPlus, Search, Sparkles, WandSparkles } from 'lucide-react';
+import { ArrowRight, CopyPlus, Search, ShieldCheck, AlertCircle, Heart, Pill } from 'lucide-react';
 import { toast } from 'sonner';
 
 import { Button } from '@/components/ui/button';
@@ -62,11 +62,13 @@ export function MedicineSearchPage() {
   }, [debouncedQuery]);
 
   const emptyState = useMemo(() => {
-    if (error) return 'Search failed. Try again or refine the query.';
-    if (query.trim().length < 2) return 'Search by generic name, brand name, or composition.';
-    if (!items.length && !isLoading) return 'No medicines matched your query.';
+    if (error) return 'Search failed. Please try again.';
+    if (query.trim().length < 2) return 'Enter a medicine name to check interactions, precautions, and safety information.';
+    if (!items.length && !isLoading) return 'No medicines found. Try a different name or check the spelling.';
     return '';
   }, [error, isLoading, items.length, query]);
+
+  const exampleMedicines = ['Paracetamol', 'Aspirin', 'Dolo 650', 'Metformin'];
 
   async function openMedicine(medicine: Medicine) {
     setSelectedMedicine(medicine);
@@ -87,49 +89,61 @@ export function MedicineSearchPage() {
     : 'Brand-to-generic guidance appears here when a branded product is available.';
 
   return (
-    <div className="space-y-8">
-      <section className="grid gap-6 xl:grid-cols-[1.15fr_0.85fr]">
-        <Card className="border-teal-100 bg-gradient-to-br from-teal-50 via-white to-cyan-50">
-          <CardHeader>
+    <div className="space-y-6">
+      <section>
+        <Card className="border-teal-100 bg-gradient-to-br from-teal-50 via-white to-cyan-50 shadow-[0_8px_24px_rgba(20,184,166,0.08)]">
+          <CardHeader className="pb-4">
             <Badge variant="soft" className="w-fit gap-2 px-3 py-2 text-sm">
-              <Search className="h-4 w-4" />
-              Live medicine search
+              <ShieldCheck className="h-4 w-4" />
+              Safety-first medicine search
             </Badge>
-            <CardTitle className="mt-3 text-4xl">Find medicine records with a fast, polished search flow.</CardTitle>
-            <CardDescription className="max-w-2xl text-base leading-7">
-              Search local medicine data, then open rich detail cards for brand conversion, precautions, dosage guidance, and source metadata.
+            <CardTitle className="mt-3 text-3xl font-bold leading-tight">Check medicine details, interactions, and precautions</CardTitle>
+            <CardDescription className="max-w-3xl text-sm leading-6 mt-2">
+              Access verified medicine data to check safety profiles, allergic reactions, drug interactions, pregnancy precautions, and detailed dosage guidance.
             </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <form className="grid gap-3 sm:grid-cols-[1fr_auto]" onSubmit={form.handleSubmit(() => undefined)}>
-              <Input placeholder="Search generic or brand names" {...form.register('query')} />
-              <Button type="submit" className="sm:min-w-36" disabled={isLoading}>
-                {isLoading ? 'Searching...' : 'Search'}
-                <ArrowRight className="h-4 w-4" />
-              </Button>
-            </form>
-            <p className="mt-3 text-sm text-muted-foreground">Type at least two characters to start the live query.</p>
-          </CardContent>
-        </Card>
 
-        <Card>
-          <CardHeader>
-            <CardTitle>Search tips</CardTitle>
-            <CardDescription>Live search is debounced to keep the UI responsive on mobile and desktop.</CardDescription>
-          </CardHeader>
-          <CardContent className="grid gap-3">
-            {[
-              'Use brand names to see the generic mapping.',
-              'Open a result for dosage, precautions, and contraindications.',
-              'Build on search history from the dashboard overview.',
-            ].map((item) => (
-              <div key={item} className="flex items-start gap-3 rounded-2xl border border-border/70 bg-white p-4 text-sm leading-6 text-slate-700">
-                <div className="mt-1 rounded-full bg-teal-50 p-1.5 text-teal-700">
-                  <WandSparkles className="h-3.5 w-3.5" />
-                </div>
-                <span>{item}</span>
+            {/* Trust Indicators */}
+            <div className="mt-4 flex flex-wrap gap-2">
+              <div className="flex items-center gap-1.5 rounded-full bg-white/70 px-2.5 py-1 text-xs">
+                <ShieldCheck className="h-3.5 w-3.5 text-teal-600" />
+                <span className="text-slate-700">Interaction Safety</span>
               </div>
-            ))}
+              <div className="flex items-center gap-1.5 rounded-full bg-white/70 px-2.5 py-1 text-xs">
+                <AlertCircle className="h-3.5 w-3.5 text-teal-600" />
+                <span className="text-slate-700">Allergy Aware</span>
+              </div>
+              <div className="flex items-center gap-1.5 rounded-full bg-white/70 px-2.5 py-1 text-xs">
+                <Heart className="h-3.5 w-3.5 text-teal-600" />
+                <span className="text-slate-700">Pregnancy Safe</span>
+              </div>
+              <div className="flex items-center gap-1.5 rounded-full bg-white/70 px-2.5 py-1 text-xs">
+                <Pill className="h-3.5 w-3.5 text-teal-600" />
+                <span className="text-slate-700">Verified Data</span>
+              </div>
+            </div>
+          </CardHeader>
+
+          <CardContent className="space-y-3">
+            <form className="space-y-3" onSubmit={form.handleSubmit(() => undefined)}>
+              <div className="relative group">
+                <Input
+                  placeholder="Search medicine by generic name, brand name, or strength..."
+                  className="border-teal-200/60 bg-white/80 placeholder:text-slate-500 focus:border-teal-400 focus:ring-1 focus:ring-teal-200 py-4 text-base shadow-sm group-focus-within:shadow-md transition-shadow"
+                  {...form.register('query')}
+                />
+              </div>
+              <div className="flex gap-2 sm:flex-row flex-col">
+                <Button
+                  type="submit"
+                  className="flex-1 sm:flex-initial sm:min-w-44 bg-teal-600 hover:bg-teal-700 text-white py-4 text-base font-semibold rounded-lg shadow-sm hover:shadow-md transition-shadow"
+                  disabled={isLoading}
+                >
+                  {isLoading ? 'Searching...' : 'Check Medicine'}
+                  <ArrowRight className="h-5 w-5 ml-2" />
+                </Button>
+              </div>
+              <p className="text-xs text-slate-500 font-medium">Type at least 2 characters for instant search • No account required</p>
+            </form>
           </CardContent>
         </Card>
       </section>
@@ -137,12 +151,19 @@ export function MedicineSearchPage() {
       <section>
         <div className="mb-4 flex items-end justify-between gap-4">
           <div>
-            <p className="text-sm font-semibold uppercase tracking-[0.28em] text-teal-700">Results</p>
-            <h2 className="mt-2 font-display text-3xl font-bold tracking-tight text-slate-950">{total ? `${total} results found` : 'Search results will appear here'}</h2>
+            <p className="text-xs font-bold uppercase tracking-[0.28em] text-teal-700">Medicine Results</p>
+            <h2 className="mt-2 text-2xl font-bold tracking-tight text-slate-950">
+              {total
+                ? total === 1
+                  ? '1 medicine found'
+                  : `${total} medicines found`
+                : 'Search results appear here'}
+            </h2>
+            {total > 0 && <p className="mt-1.5 text-xs text-slate-600">Click on any result to view detailed information</p>}
           </div>
-          <Badge variant="outline" className="hidden px-3 py-2 text-sm sm:inline-flex">
+          <Badge variant="outline" className="hidden px-3 py-2 text-xs sm:inline-flex">
             <CopyPlus className="h-4 w-4" />
-            Local medicine data
+            Verified data
           </Badge>
         </div>
 
@@ -161,37 +182,75 @@ export function MedicineSearchPage() {
             ))}
           </div>
         ) : items.length ? (
-          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
             {items.map((medicine) => (
-              <Card key={medicine.id} className="h-full cursor-pointer border-white/70 bg-white/85 transition hover:-translate-y-1 hover:shadow-xl" onClick={() => openMedicine(medicine)}>
-                <CardHeader>
-                  <div className="flex items-start justify-between gap-4">
-                    <div>
-                      <CardTitle className="text-2xl">{medicine.generic_name}</CardTitle>
-                      <CardDescription className="mt-2 text-base">{medicine.brand_name ?? 'Brand name not listed'}</CardDescription>
+              <Card
+                key={medicine.id}
+                className="group h-full cursor-pointer border-slate-200/60 bg-white/90 shadow-sm hover:shadow-lg transition-all duration-200 hover:-translate-y-0.5 overflow-hidden"
+                onClick={() => openMedicine(medicine)}
+              >
+                <CardHeader className="pb-2">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="flex-1 min-w-0">
+                      <CardTitle className="text-base font-bold text-slate-950 truncate group-hover:text-teal-600 transition-colors">
+                        {medicine.generic_name}
+                      </CardTitle>
+                      <CardDescription className="mt-0.5 text-xs font-medium text-slate-600 truncate">
+                        {medicine.brand_name ? `Brand: ${medicine.brand_name}` : 'Generic medicine'}
+                      </CardDescription>
                     </div>
-                    <Badge variant={medicine.brand_name ? 'soft' : 'outline'}>{medicine.source_name}</Badge>
+                    <Badge variant="soft" className="ml-2 shrink-0 text-xs font-semibold">
+                      {medicine.source_name}
+                    </Badge>
                   </div>
                 </CardHeader>
-                <CardContent className="space-y-4">
-                  <p className="line-clamp-4 text-sm leading-6 text-muted-foreground">{stripHtml(medicine.composition ?? medicine.usage_guidelines ?? medicine.side_effects ?? 'No additional record details available.')}</p>
-                  <div className="flex flex-wrap gap-2">
-                    {medicine.dosage_form ? <Badge variant="outline">{medicine.dosage_form}</Badge> : null}
-                    {medicine.strength ? <Badge variant="outline">{medicine.strength}</Badge> : null}
-                    {medicine.aliases.slice(0, 2).map((alias) => (
-                      <Badge key={alias.id} variant="secondary">
+                <CardContent className="space-y-2 pb-3">
+                  <p className="line-clamp-2 text-xs leading-relaxed text-slate-700">
+                    {stripHtml(
+                      medicine.composition || medicine.usage_guidelines || medicine.side_effects || 'Detailed medicine information available'
+                    )}
+                  </p>
+                  <div className="flex flex-wrap gap-1.5">
+                    {medicine.dosage_form && <Badge variant="outline" className="text-xs">{medicine.dosage_form}</Badge>}
+                    {medicine.strength && <Badge variant="outline" className="text-xs">{medicine.strength}</Badge>}
+                    {medicine.aliases.slice(0, 1).map((alias) => (
+                      <Badge key={alias.id} variant="secondary" className="text-xs">
                         {alias.alias}
                       </Badge>
                     ))}
                   </div>
                 </CardContent>
+                <div className="border-t border-slate-100 bg-gradient-to-r from-teal-50/30 to-cyan-50/30 px-3 py-2">
+                  <p className="text-xs font-medium text-teal-700">Click for details & interactions</p>
+                </div>
               </Card>
             ))}
           </div>
         ) : (
-          <div className="rounded-3xl border border-dashed border-border/80 bg-white/70 p-10 text-center">
-            <p className="text-lg font-semibold text-slate-950">{emptyState}</p>
-            <p className="mt-2 text-sm text-muted-foreground">{query.trim().length < 2 ? 'Search a medicine to see live results.' : 'Try a broader brand or generic term.'}</p>
+          <div className="rounded-2xl border border-slate-200 bg-slate-50/50 p-8 text-center">
+            <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-teal-100">
+              <Search className="h-6 w-6 text-teal-600" />
+            </div>
+            <h3 className="text-base font-semibold text-slate-950">{emptyState}</h3>
+            {query.trim().length < 2 && (
+              <div className="mt-4 space-y-3">
+                <p className="text-xs font-medium text-slate-700">Try searching for:</p>
+                <div className="flex flex-wrap justify-center gap-2">
+                  {exampleMedicines.map((medicine) => (
+                    <button
+                      key={medicine}
+                      onClick={() => form.setValue('query', medicine)}
+                      className="rounded-full border border-teal-200 bg-white px-3 py-1.5 text-xs text-teal-700 hover:bg-teal-50 transition-colors"
+                    >
+                      {medicine}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+            {query.trim().length >= 2 && (
+              <p className="mt-2 text-xs text-slate-600">Try a different medicine name, brand name, or check the spelling</p>
+            )}
           </div>
         )}
       </section>
@@ -211,86 +270,132 @@ export function MedicineSearchPage() {
             </div>
           ) : selectedMedicine ? (
             <div className="space-y-6 py-4">
+              {/* Key Info Grid */}
               <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-                <div className="rounded-2xl bg-teal-50 p-4">
-                  <p className="text-xs font-semibold uppercase tracking-[0.24em] text-teal-700">Brand</p>
-                  <p className="mt-2 text-lg font-semibold text-slate-900">{selectedMedicine.brand_name ?? 'None listed'}</p>
+                <div className="rounded-2xl border border-teal-100 bg-gradient-to-br from-teal-50 to-cyan-50 p-4">
+                  <p className="text-xs font-bold uppercase tracking-[0.24em] text-teal-700">Generic Name</p>
+                  <p className="mt-2 text-lg font-semibold text-slate-950">{selectedMedicine.generic_name}</p>
                 </div>
-                <div className="rounded-2xl bg-teal-50 p-4">
-                  <p className="text-xs font-semibold uppercase tracking-[0.24em] text-teal-700">Generic</p>
-                  <p className="mt-2 text-lg font-semibold text-slate-900">{selectedMedicine.generic_name}</p>
+                <div className="rounded-2xl border border-teal-100 bg-gradient-to-br from-teal-50 to-cyan-50 p-4">
+                  <p className="text-xs font-bold uppercase tracking-[0.24em] text-teal-700">Brand Name</p>
+                  <p className="mt-2 text-lg font-semibold text-slate-950">{selectedMedicine.brand_name ?? '—'}</p>
                 </div>
-                <div className="rounded-2xl bg-teal-50 p-4">
-                  <p className="text-xs font-semibold uppercase tracking-[0.24em] text-teal-700">Confidence</p>
-                  <p className="mt-2 text-lg font-semibold text-slate-900">{Math.round(selectedMedicine.confidence * 100)}%</p>
+                <div className="rounded-2xl border border-teal-100 bg-gradient-to-br from-teal-50 to-cyan-50 p-4">
+                  <p className="text-xs font-bold uppercase tracking-[0.24em] text-teal-700">Data Confidence</p>
+                  <p className="mt-2 text-lg font-semibold text-slate-950">{Math.round(selectedMedicine.confidence * 100)}%</p>
                 </div>
-                <div className="rounded-2xl bg-teal-50 p-4">
-                  <p className="text-xs font-semibold uppercase tracking-[0.24em] text-teal-700">Source</p>
-                  <p className="mt-2 text-lg font-semibold text-slate-900">{selectedMedicine.source_name}</p>
+                <div className="rounded-2xl border border-teal-100 bg-gradient-to-br from-teal-50 to-cyan-50 p-4">
+                  <p className="text-xs font-bold uppercase tracking-[0.24em] text-teal-700">Verified Source</p>
+                  <p className="mt-2 text-lg font-semibold text-slate-950">{selectedMedicine.source_name}</p>
                 </div>
               </div>
 
+              {/* Composition & Usage */}
+              <Card className="border-slate-200/60 bg-white/90 shadow-sm">
+                <CardHeader>
+                  <CardTitle className="text-lg font-bold">Composition & Dosage</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-4 text-sm">
+                  <div>
+                    <p className="font-semibold text-slate-950">Composition</p>
+                    <p className="mt-1 text-slate-700">{selectedMedicine.composition ?? '—'}</p>
+                  </div>
+                  <div>
+                    <p className="font-semibold text-slate-950">Dosage Form</p>
+                    <p className="mt-1 text-slate-700">{selectedMedicine.dosage_form ?? '—'}</p>
+                  </div>
+                  <div>
+                    <p className="font-semibold text-slate-950">Strength</p>
+                    <p className="mt-1 text-slate-700">{selectedMedicine.strength ?? '—'}</p>
+                  </div>
+                  <div>
+                    <p className="font-semibold text-slate-950">Usage Guidelines</p>
+                    <p className="mt-1 text-slate-700">{selectedMedicine.usage_guidelines ?? '—'}</p>
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* Safety & Risk Information */}
               <div className="grid gap-4 lg:grid-cols-2">
-                <Card className="border-border/70 bg-white/90">
+                <Card className="border-rose-200/50 bg-gradient-to-br from-rose-50/50 to-white shadow-sm">
                   <CardHeader>
-                    <CardTitle className="text-xl">Usage and composition</CardTitle>
+                    <CardTitle className="flex items-center gap-2 text-lg font-bold">
+                      <AlertCircle className="h-5 w-5 text-rose-600" />
+                      Safety Warnings
+                    </CardTitle>
                   </CardHeader>
-                  <CardContent className="space-y-3 text-sm leading-7 text-muted-foreground">
-                    <p><span className="font-semibold text-slate-900">Composition:</span> {selectedMedicine.composition ?? 'Not listed'}</p>
-                    <p><span className="font-semibold text-slate-900">Dosage form:</span> {selectedMedicine.dosage_form ?? 'Not listed'}</p>
-                    <p><span className="font-semibold text-slate-900">Strength:</span> {selectedMedicine.strength ?? 'Not listed'}</p>
-                    <p><span className="font-semibold text-slate-900">Usage guidance:</span> {selectedMedicine.usage_guidelines ?? 'No usage guidance stored.'}</p>
+                  <CardContent className="space-y-4 text-sm">
+                    <div>
+                      <p className="font-semibold text-slate-950">Side Effects</p>
+                      <p className="mt-1 text-slate-700">{selectedMedicine.side_effects ?? 'No known side effects listed'}</p>
+                    </div>
+                    <div>
+                      <p className="font-semibold text-slate-950">Precautions</p>
+                      <p className="mt-1 text-slate-700">{selectedMedicine.precautions ?? 'No precautions listed'}</p>
+                    </div>
+                    <div>
+                      <p className="font-semibold text-slate-950">Contraindications</p>
+                      <p className="mt-1 text-slate-700">{selectedMedicine.contraindications ?? 'No contraindications listed'}</p>
+                    </div>
                   </CardContent>
                 </Card>
 
-                <Card className="border-border/70 bg-white/90">
+                <Card className="border-slate-200/60 bg-white/90 shadow-sm">
                   <CardHeader>
-                    <CardTitle className="text-xl">Risk notes</CardTitle>
+                    <CardTitle className="flex items-center gap-2 text-lg font-bold">
+                      <Pill className="h-5 w-5 text-teal-600" />
+                      Brand Conversion
+                    </CardTitle>
                   </CardHeader>
-                  <CardContent className="space-y-3 text-sm leading-7 text-muted-foreground">
-                    <p><span className="font-semibold text-slate-900">Side effects:</span> {selectedMedicine.side_effects ?? 'Not listed'}</p>
-                    <p><span className="font-semibold text-slate-900">Precautions:</span> {selectedMedicine.precautions ?? 'Not listed'}</p>
-                    <p><span className="font-semibold text-slate-900">Contraindications:</span> {selectedMedicine.contraindications ?? 'Not listed'}</p>
-                  </CardContent>
-                </Card>
-              </div>
-
-              <div className="grid gap-4 lg:grid-cols-2">
-                <Card className="border-border/70 bg-white/90">
-                  <CardHeader>
-                    <CardTitle className="text-xl">Brand to generic conversion</CardTitle>
-                  </CardHeader>
-                  <CardContent className="text-sm leading-7 text-muted-foreground">
+                  <CardContent className="space-y-3 text-sm">
                     {selectedMedicine.brand_name ? (
-                      <p>
-                        <span className="font-semibold text-slate-900">{selectedMedicine.brand_name}</span> maps to{' '}
-                        <span className="font-semibold text-slate-900">{selectedMedicine.generic_name}</span>.
-                      </p>
+                      <div className="rounded-lg bg-teal-50 p-3">
+                        <p className="text-xs font-semibold uppercase text-teal-700">Mapping</p>
+                        <p className="mt-2 text-slate-900">
+                          <span className="font-semibold">{selectedMedicine.brand_name}</span> (brand) →{' '}
+                          <span className="font-semibold">{selectedMedicine.generic_name}</span> (generic)
+                        </p>
+                      </div>
                     ) : (
-                      <p>No branded mapping is stored for this record.</p>
+                      <p className="text-slate-600">No brand-to-generic mapping available for this medicine.</p>
                     )}
                   </CardContent>
                 </Card>
+              </div>
 
-                <Card className="border-border/70 bg-white/90">
-                  <CardHeader>
-                    <CardTitle className="text-xl">Aliases and sources</CardTitle>
-                  </CardHeader>
-                  <CardContent className="space-y-3 text-sm leading-7 text-muted-foreground">
-                    <div className="flex flex-wrap gap-2">
-                      {selectedMedicine.aliases.length ? selectedMedicine.aliases.map((alias) => <Badge key={alias.id} variant="secondary">{alias.alias}</Badge>) : <span>None stored.</span>}
-                    </div>
+              {/* Aliases & Sources */}
+              <Card className="border-slate-200/60 bg-white/90 shadow-sm">
+                <CardHeader>
+                  <CardTitle className="text-lg font-bold">Alternative Names & Sources</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div>
+                    <p className="text-sm font-semibold text-slate-950 mb-2">Also Known As</p>
+                    {selectedMedicine.aliases.length ? (
+                      <div className="flex flex-wrap gap-2">
+                        {selectedMedicine.aliases.map((alias) => (
+                          <Badge key={alias.id} variant="secondary">
+                            {alias.alias}
+                          </Badge>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="text-sm text-slate-600">No aliases recorded</p>
+                    )}
+                  </div>
+                  <div>
+                    <p className="text-sm font-semibold text-slate-950 mb-2">Data Sources</p>
                     <div className="space-y-2">
                       {selectedMedicine.sources.map((source) => (
-                        <div key={source.id} className="rounded-2xl bg-teal-50/70 p-3 text-slate-700">
-                          <p className="font-semibold text-slate-900">{source.source_name}</p>
-                          <p>{source.source_url ?? 'Source metadata not available'}</p>
+                        <div key={source.id} className="rounded-lg border border-slate-200 bg-slate-50 p-3">
+                          <p className="font-semibold text-slate-900 text-sm">{source.source_name}</p>
+                          {source.source_url && <p className="mt-1 text-xs text-slate-600 break-all">{source.source_url}</p>}
                         </div>
                       ))}
                     </div>
-                  </CardContent>
-                </Card>
-              </div>
+                  </div>
+                </CardContent>
+              </Card>
             </div>
           ) : null}
         </DialogContent>

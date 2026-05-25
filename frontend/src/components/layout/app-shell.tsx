@@ -1,23 +1,21 @@
-import { useMemo, useState } from 'react';
-import { Activity, FileClock, HeartPulse, LogOut, Menu, Search, ShieldPlus, Sparkles, UserRound, Stethoscope, WandSparkles } from 'lucide-react';
+import { useState } from 'react';
+import { Activity, FileClock, LogOut, Menu, Search, ShieldPlus, Sparkles, UserRound, Stethoscope, WandSparkles, Home } from 'lucide-react';
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 
-import { APP_NAME, navigationLinks } from '@/lib/constants';
+import { APP_NAME, routeTitles } from '@/lib/constants';
 import { logout } from '@/services/api/auth';
 import { useAuthStore } from '@/store/auth-store';
 
 import { Button } from '../ui/button';
-import { Card } from '../ui/card';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '../ui/dialog';
 
 const dashboardLinks = [
-  { label: 'Overview', href: '/app', icon: Sparkles },
-  { label: 'Medicines', href: '/app/medicines', icon: Search },
-  { label: 'Symptoms', href: '/app/symptoms', icon: Stethoscope },
-  { label: 'Interactions', href: '/app/interactions', icon: Activity },
-  { label: 'Pregnancy', href: '/app/pregnancy', icon: HeartPulse },
+  { label: 'Home', href: '/app', icon: Home },
   { label: 'Profile', href: '/app/profile', icon: UserRound },
+  { label: 'Interactions', href: '/app/interactions', icon: Activity },
+  { label: 'Symptoms', href: '/app/symptoms', icon: Stethoscope },
+  { label: 'Medicines', href: '/app/medicines', icon: Search },
   { label: 'History', href: '/app/history', icon: FileClock },
 ];
 
@@ -30,8 +28,6 @@ export function AppShell() {
   const location = useLocation();
   const [loggingOut, setLoggingOut] = useState(false);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
-
-  const activeSection = useMemo(() => dashboardLinks.find((link) => location.pathname === link.href || location.pathname.startsWith(`${link.href}/`)), [location.pathname]);
 
   async function handleLogout() {
     if (!refreshToken) {
@@ -66,7 +62,7 @@ export function AppShell() {
             </span>
           </div>
 
-          <div className="space-y-2">
+          <nav className="flex-1 space-y-2">
             {dashboardLinks.map((link) => {
               const Icon = link.icon;
               return (
@@ -95,15 +91,9 @@ export function AppShell() {
                 Admin workspace
               </NavLink>
             ) : null}
-          </div>
+          </nav>
 
-          <Card className="mt-6 border-teal-100 bg-gradient-to-br from-teal-50 to-white p-4 shadow-none">
-            <p className="text-xs font-semibold uppercase tracking-[0.28em] text-teal-700">Current route</p>
-            <p className="mt-2 text-lg font-semibold text-slate-900">{activeSection?.label ?? 'Dashboard'}</p>
-            <p className="mt-2 text-sm leading-6 text-muted-foreground">{user?.full_name ? `Signed in as ${user.full_name}` : 'Complete your profile to unlock safer recommendations.'}</p>
-          </Card>
-
-          <div className="mt-auto space-y-3 pt-6">
+          <div className="space-y-3 border-t border-border/50 pt-6">
             {user && (
               <div className="rounded-2xl border border-border/70 bg-muted/30 px-4 py-3 text-sm">
                 <p className="font-semibold text-slate-900 truncate">{user.full_name || 'Account'}</p>
@@ -124,10 +114,7 @@ export function AppShell() {
                 <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-gradient-to-br from-teal-500 to-cyan-400 text-white shadow-soft lg:hidden">
                   <ShieldPlus className="h-5 w-5" />
                 </div>
-                <div>
-                  <p className="text-sm uppercase tracking-[0.28em] text-teal-700">Dashboard</p>
-                  <h1 className="font-display text-2xl font-bold text-slate-900">{activeSection?.label ?? 'Overview'}</h1>
-                </div>
+                <h1 className="font-display text-2xl font-bold text-slate-900">{routeTitles[location.pathname] ?? 'Home'}</h1>
               </div>
 
               <div className="flex items-center gap-3">
