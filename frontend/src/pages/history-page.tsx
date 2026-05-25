@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { Pill, AlertTriangle, Stethoscope, User, FileClock, Trash2, Clock, ChevronRight } from 'lucide-react';
+import { Pill, AlertTriangle, Stethoscope, User, FileClock, Trash2, Clock, ChevronRight, Heart } from 'lucide-react';
 import { toast } from 'sonner';
 
 import { Badge } from '@/components/ui/badge';
@@ -9,7 +9,7 @@ import { clearHistory, readHistory } from '@/lib/history';
 import { formatRelativeDate } from '@/lib/utils';
 import type { PagedHistoryItem } from '@/types/api';
 
-const filters: Array<'all' | PagedHistoryItem['kind']> = ['all', 'medicine', 'interaction', 'symptom', 'profile'];
+const filters: Array<'all' | PagedHistoryItem['kind']> = ['all', 'medicine', 'interaction', 'symptom', 'profile', 'pregnancy'];
 
 // Icons for each history kind
 const kindIcons: Record<PagedHistoryItem['kind'], React.ComponentType<{ className?: string }>> = {
@@ -17,6 +17,7 @@ const kindIcons: Record<PagedHistoryItem['kind'], React.ComponentType<{ classNam
   interaction: AlertTriangle,
   symptom: Stethoscope,
   profile: User,
+  pregnancy: Heart,
 };
 
 // Labels for each history kind
@@ -25,6 +26,7 @@ const kindLabels: Record<PagedHistoryItem['kind'], string> = {
   interaction: 'Interaction Check',
   symptom: 'Symptom Analysis',
   profile: 'Profile Update',
+  pregnancy: 'Pregnancy Status',
 };
 
 // Helper to group items by date
