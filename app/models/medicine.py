@@ -15,6 +15,7 @@ class ImportBatch(Base):
     source_name: Mapped[str] = mapped_column(String(120), nullable=False)
     source_type: Mapped[str] = mapped_column(String(50), nullable=False)
     filename: Mapped[str | None] = mapped_column(String(255))
+    status: Mapped[str] = mapped_column(String(20), nullable=False, default="pending")
     records_total: Mapped[int] = mapped_column(default=0, nullable=False)
     records_imported: Mapped[int] = mapped_column(default=0, nullable=False)
     errors: Mapped[str | None] = mapped_column(Text)
