@@ -20,7 +20,6 @@ class HealthProfile(Base):
     medical_conditions: Mapped[str | None] = mapped_column(Text)
     current_medications: Mapped[str | None] = mapped_column(Text)
     is_pregnant: Mapped[bool | None] = mapped_column()
-    is_lactating: Mapped[bool | None] = mapped_column()
     notes: Mapped[str | None] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, onupdate=utc_now)

@@ -77,7 +77,6 @@ function getSafetyLevel(medicine: Medicine, profile: HealthProfile | null): Safe
   }
 
   if (profile.is_pregnant && rawText.includes('pregnan')) return 'high-risk';
-  if (profile.is_lactating && (rawText.includes('lactat') || rawText.includes('breastfeed'))) return 'high-risk';
 
   for (const cond of conditions) {
     if (cond && (medicine.contraindications ?? '').toLowerCase().includes(cond)) return 'high-risk';
@@ -156,11 +155,9 @@ function generateDosageInfo(medicine: Medicine, profile: HealthProfile | null): 
   // Profile-aware note
   let profileNote: string | null = null;
   if (profile) {
-    const { age, weight_kg: weight, gender, is_pregnant, is_lactating } = profile;
+    const { age, weight_kg: weight, gender, is_pregnant } = profile;
     if (is_pregnant) {
       profileNote = '⚠️ You are pregnant — consult your obstetrician before taking any medication.';
-    } else if (is_lactating) {
-      profileNote = '⚠️ You are breastfeeding — confirm safety with your doctor before use.';
     } else if (age != null && age >= 65) {
       profileNote = '👴 Adults over 65 should start with the lowest effective dose and monitor closely.';
     } else if (age != null && age < 12) {

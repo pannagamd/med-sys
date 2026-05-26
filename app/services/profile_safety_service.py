@@ -4,7 +4,6 @@ from app.services.text import normalize_key, split_values
 
 
 PREGNANCY_TERMS = {"pregnancy", "pregnant"}
-LACTATION_TERMS = {"lactation", "breastfeeding", "breast feeding", "nursing"}
 
 
 class ProfileSafetyService:
@@ -23,7 +22,7 @@ class ProfileSafetyService:
             warnings.extend(self._allergy_warnings(medicine, allergies, searchable_terms))
             warnings.extend(self._current_medication_warnings(medicine, current, searchable_terms))
             warnings.extend(self._condition_warnings(medicine, conditions))
-            warnings.extend(self._pregnancy_lactation_warnings(medicine, profile))
+            warnings.extend(self._pregnancy_warnings(medicine, profile))
 
         return warnings
 
@@ -107,34 +106,39 @@ class ProfileSafetyService:
                 )
         return warnings
 
-    def _pregnancy_lactation_warnings(
+    def _pregnancy_warnings(
         self,
         medicine: ResolvedMedicine,
         profile: HealthProfile,
     ) -> list[ProfileWarning]:
         warnings: list[ProfileWarning] = []
-        contraindications = normalize_key(medicine.contraindications)
-        precautions = normalize_key(medicine.precautions)
         if profile.is_pregnant:
-            warnings.append(
-                self._status_warning(
-                    medicine,
-                    "Pregnancy",
-                    PREGNANCY_TERMS,
-                    contraindications,
-                    precautions,
+            contraindications = normalize_key(medicine.contraindications)
+            precautions = normalize_key(medicine.precautions)
+            if any(term in contraindications for term in PREGNANCY_TERMS):
+                warnings.append(
+                    ProfileWarning(
+                        severity="dangerous",
+                        medicine=medicine.resolved_name,
+                        message="Pregnancy is noted in the profile and appears in contraindications.",
+                    )
                 )
-            )
-        if profile.is_lactating:
-            warnings.append(
-                self._status_warning(
-                    medicine,
-                    "Lactation",
-                    LACTATION_TERMS,
-                    contraindications,
-                    precautions,
+            elif any(term in precautions for term in PREGNANCY_TERMS):
+                warnings.append(
+                    ProfileWarning(
+                        severity="moderate",
+                        medicine=medicine.resolved_name,
+                        message="Pregnancy is noted in the profile and appears in precautions.",
+                    )
                 )
-            )
+            else:
+                warnings.append(
+                    ProfileWarning(
+                        severity="moderate",
+                        medicine=medicine.resolved_name,
+                        message="Pregnancy is noted in the profile; medicine safety should be reviewed by a clinician.",
+                    )
+                )
         return warnings
 
     def _status_warning(

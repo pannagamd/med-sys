@@ -12,7 +12,6 @@ class HealthProfileUpdate(BaseModel):
     medical_conditions: str | None = None
     current_medications: str | None = None
     is_pregnant: bool | None = None
-    is_lactating: bool | None = None
     notes: str | None = None
 
 

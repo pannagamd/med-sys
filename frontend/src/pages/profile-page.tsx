@@ -25,7 +25,6 @@ export function ProfilePage() {
     defaultValues: {
       gender: '',
       is_pregnant: false,
-      is_lactating: false,
     } as HealthProfile,
   });
 
@@ -48,11 +47,10 @@ export function ProfilePage() {
   }, [form]);
 
   async function handleSave(values: HealthProfile) {
-    // Clear pregnancy/lactation flags when gender is not female
+    // Clear pregnancy flag when gender is not female
     const payload = {
       ...values,
       is_pregnant: isFemale ? values.is_pregnant : false,
-      is_lactating: isFemale ? values.is_lactating : false,
     };
 
     try {
@@ -135,14 +133,10 @@ export function ProfilePage() {
 
               {/* Female-only fields */}
               {isFemale && (
-                <div className="grid gap-2.5 sm:grid-cols-2">
+                <div className="grid gap-2.5">
                   <label className="flex cursor-pointer items-center gap-2.5 rounded-2xl border border-border/70 bg-white p-2.5 text-xs text-slate-700 transition hover:bg-teal-50/40">
                     <Checkbox {...form.register('is_pregnant')} />
                     Pregnant
-                  </label>
-                  <label className="flex cursor-pointer items-center gap-2.5 rounded-2xl border border-border/70 bg-white p-2.5 text-xs text-slate-700 transition hover:bg-teal-50/40">
-                    <Checkbox {...form.register('is_lactating')} />
-                    Lactating / Breastfeeding
                   </label>
                 </div>
               )}

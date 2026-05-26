@@ -116,7 +116,6 @@ export interface HealthProfile {
   medical_conditions?: string | null;
   current_medications?: string | null;
   is_pregnant?: boolean | null;
-  is_lactating?: boolean | null;
   notes?: string | null;
 }
 

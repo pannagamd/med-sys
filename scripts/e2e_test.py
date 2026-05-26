@@ -192,7 +192,7 @@ check("GET /profile → 200", r.status_code == 200, r.text)
 # Upsert profile — male
 r = req("PUT", "/profile", token=ACCESS,
         json={"age": 35, "gender": "male", "weight_kg": 75.0,
-              "allergies": None, "is_pregnant": False, "is_lactating": False})
+              "allergies": None, "is_pregnant": False})
 check("PUT /profile (male) → 200", r.status_code == 200, r.text)
 
 # Confirm no pregnancy warnings in interactions for male profile
@@ -211,7 +211,7 @@ section("Pregnancy Safety Filter — gender=female triggers filter")
 # Set profile to female, is_pregnant NOT set
 r = req("PUT", "/profile", token=ACCESS,
         json={"age": 28, "gender": "female", "weight_kg": 60.0,
-              "allergies": None, "is_pregnant": None, "is_lactating": None})
+              "allergies": None, "is_pregnant": None})
 check("PUT /profile (female, is_pregnant=null) → 200", r.status_code == 200, r.text)
 
 # Interactions with female profile — should carry pregnancy advisory
@@ -241,7 +241,7 @@ if r.status_code == 200:
 
 # Now set is_pregnant=True — warnings should escalate to dangerous
 r = req("PUT", "/profile", token=ACCESS,
-        json={"gender": "female", "is_pregnant": True, "is_lactating": False})
+        json={"gender": "female", "is_pregnant": True})
 check("PUT /profile (female, is_pregnant=True) → 200", r.status_code == 200, r.text)
 
 r = req("POST", "/interactions/analyze", token=ACCESS,
@@ -259,7 +259,7 @@ section("Symptom Suggestions + Pregnancy filter in symptoms")
 
 # Reset profile to female, no pregnancy
 r = req("PUT", "/profile", token=ACCESS,
-        json={"gender": "female", "is_pregnant": None, "is_lactating": None})
+        json={"gender": "female", "is_pregnant": None})
 
 r = req("POST", "/symptoms/suggest", token=ACCESS,
         json={"symptoms": ["fever", "body ache"], "include_saved_profile": True})
@@ -278,7 +278,7 @@ if r.status_code == 200:
 
 # Male profile — no pregnancy advisory in symptoms
 r = req("PUT", "/profile", token=ACCESS,
-        json={"gender": "male", "is_pregnant": False, "is_lactating": False})
+        json={"gender": "male", "is_pregnant": False})
 r = req("POST", "/symptoms/suggest", token=ACCESS,
         json={"symptoms": ["fever", "body ache"], "include_saved_profile": True})
 if r.status_code == 200:
