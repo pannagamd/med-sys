@@ -3,10 +3,7 @@ Seed script: loads all medicine and symptom data from the provided Excel files
 into the database.
 
 Usage (from the ProjectFixed folder):
-    python scripts/seed_data.py [--force]
-
-Options:
-    --force     Bypass the idempotency guard and re-import even if medicines exist.
+    python scripts/seed_data.py
 
 Files expected inside checkfordata/ (project root subfolder):
   - checkfordata/All_A_Medicines_With_Food_Interactions.xlsx   (standalone A)
@@ -17,16 +14,10 @@ Files expected inside checkfordata/ (project root subfolder):
   - workspace-*.zip                                            (D-Z letters, at root)
   - symptoms.xlsx                                              (symptom rules, at root)
 
-Idempotency: if the database already contains more than IDEMPOTENCY_THRESHOLD
-medicines, the script exits early, so it is safe to run on every container
-start without re-seeding.  Use --force to bypass.
-
-FK Safety: an ImportBatch row is created and committed BEFORE any Medicine rows
-are inserted.  The committed batch.id is used as medicine.import_batch_id,
-preserving the foreign key constraint on every DB engine (including PostgreSQL).
+Idempotency: if the database already contains more than 10 medicines the script
+exits early, so it is safe to run on every container start without re-seeding.
 """
 
-import argparse
 import io
 import logging
 import sys
@@ -37,9 +28,7 @@ from pathlib import Path
 # ---------------------------------------------------------------------------
 # Allow running from project root: python scripts/seed_data.py
 # ---------------------------------------------------------------------------
-_ROOT = Path(__file__).resolve().parent.parent
-if str(_ROOT) not in sys.path:
-    sys.path.insert(0, str(_ROOT))
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 # Configure logging so output is visible in Docker/Render logs
 logging.basicConfig(
@@ -49,17 +38,16 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 from openpyxl import load_workbook
-from sqlalchemy import func, select as sa_select
 from sqlalchemy.orm import Session
 
 from app.db.session import SessionLocal
-from app.models.medicine import ImportBatch, Medicine, MedicineAlias, MedicineSource
+from app.models.medicine import Medicine, MedicineAlias, MedicineSource
 from app.models.symptom import SymptomRule
 
 # ---------------------------------------------------------------------------
 # File paths — edit these if your files are stored elsewhere
 # ---------------------------------------------------------------------------
-BASE = _ROOT
+BASE = Path(__file__).resolve().parent.parent
 CHECKFORDATA = BASE / "checkfordata"
 
 # Medicine catalog files — now read from checkfordata/ subfolder
@@ -76,9 +64,7 @@ AB_DOSAGE_FILE = CHECKFORDATA / "ab.xlsx"
 SYMPTOMS_FILE = BASE / "symptoms.xlsx"
 
 SOURCE_NAME = "drugs.com"
-
-# Threshold: if the DB already has more than this many medicines, skip seeding
-IDEMPOTENCY_THRESHOLD = 10
+IMPORT_BATCH = str(uuid.uuid4())
 
 
 # ---------------------------------------------------------------------------
@@ -216,6 +202,7 @@ def load_dosage_map(path: Path) -> dict[str, dict]:
                 continue
             # Columns: Brand, Generic, Indian Brands, Infant, Pediatric, Adult, Geriatric, Common Dosage, ...
             cols = list(row) + [None] * 16
+            brand       = clean(cols[0])
             generic     = clean(cols[1])
             adult_dose  = clean(cols[5])
             common_dose = clean(cols[7])
@@ -283,121 +270,10 @@ def load_symptom_rules(path: Path) -> list[dict]:
 
 
 # ---------------------------------------------------------------------------
-# 5. Create the ImportBatch row (commit BEFORE inserting medicines)
+# 5. Upsert medicines into DB
 # ---------------------------------------------------------------------------
 
-def _repair_orphan_batch_refs(db: Session) -> None:
-    """
-    Self-healing repair: find medicines whose import_batch_id references
-    a non-existent import_batches row (FK violation) and remap them to
-    the latest completed batch.  If no completed batch exists, create one.
-
-    This runs on every start of seed_data.py so existing deployments that
-    ran the old seed (which never inserted an ImportBatch) are healed
-    automatically — even when the idempotency guard skips the full seed.
-    """
-    from sqlalchemy import text
-
-    orphan_count = db.execute(text("""
-        SELECT COUNT(*) FROM medicines m
-        LEFT JOIN import_batches b ON m.import_batch_id = b.id
-        WHERE m.import_batch_id IS NOT NULL AND b.id IS NULL
-    """)).scalar() or 0
-
-    null_count = db.execute(text(
-        "SELECT COUNT(*) FROM medicines WHERE import_batch_id IS NULL"
-    )).scalar() or 0
-
-    total_broken = orphan_count + null_count
-    if total_broken == 0:
-        logger.debug("FK check: all medicine.import_batch_id values are valid.")
-        return
-
-    logger.warning(
-        "Detected %d medicines with broken import_batch_id FK references "
-        "(%d orphans, %d NULL). Repairing ...",
-        total_broken, orphan_count, null_count,
-    )
-
-    # Find or create a valid target batch
-    target = db.execute(text(
-        "SELECT id FROM import_batches WHERE status = 'completed' ORDER BY created_at DESC LIMIT 1"
-    )).fetchone()
-
-    if target:
-        target_id = target[0]
-        logger.info("Remapping broken references to existing batch %s ...", target_id[:8])
-    else:
-        # No completed batch exists at all — create a repair batch
-        repair_batch = ImportBatch(
-            id=new_id(),
-            source_name=SOURCE_NAME,
-            source_type="repair-seed",
-            filename="legacy-seed-repair",
-            status="completed",
-            records_total=0,
-            records_imported=0,
-        )
-        db.add(repair_batch)
-        db.commit()
-        db.refresh(repair_batch)
-        target_id = repair_batch.id
-        logger.info("Created repair batch %s.", target_id[:8])
-
-    # Remap all broken FK references
-    result = db.execute(text("""
-        UPDATE medicines
-        SET import_batch_id = :bid
-        WHERE import_batch_id NOT IN (SELECT id FROM import_batches)
-           OR import_batch_id IS NULL
-    """), {"bid": target_id})
-    db.commit()
-    logger.info("Repaired %d medicine rows → batch %s.", result.rowcount, target_id[:8])
-
-    # Update batch record count
-    db.execute(text("""
-        UPDATE import_batches
-        SET records_imported = (
-            SELECT COUNT(*) FROM medicines WHERE import_batch_id = :bid
-        )
-        WHERE id = :bid
-    """), {"bid": target_id})
-    db.commit()
-
-
-def create_import_batch(db: Session, records_total: int) -> ImportBatch:
-    """
-    Insert and COMMIT an ImportBatch row so its ID exists in PostgreSQL
-    before any Medicine FK references it.
-
-    Returns the refreshed ImportBatch instance with a valid .id.
-    """
-    batch = ImportBatch(
-        id=new_id(),
-        source_name=SOURCE_NAME,
-        source_type="xlsx-seed",
-        filename="All_A/B/C_Medicines + ab.xlsx + workspace-*.zip",
-        status="pending",
-        records_total=records_total,
-        records_imported=0,
-    )
-    db.add(batch)
-    db.commit()       # ← FK-safe: the row now exists in PostgreSQL
-    db.refresh(batch) # ← ensures batch.id is populated from DB
-    logger.info("ImportBatch created: id=%s records_total=%d", batch.id, records_total)
-    return batch
-
-
-# ---------------------------------------------------------------------------
-# 6. Upsert medicines into DB (using committed batch.id)
-# ---------------------------------------------------------------------------
-
-def upsert_medicines(
-    db: Session,
-    records: list[dict],
-    dosage_map: dict[str, dict],
-    batch_id: str,
-) -> tuple[int, int]:
+def upsert_medicines(db: Session, records: list[dict], dosage_map: dict[str, dict]) -> int:
     inserted = 0
     skipped = 0
     for rec in records:
@@ -442,9 +318,6 @@ def upsert_medicines(
                 existing.contraindications = rec["contraindications"]
             if not existing.composition and drug_class:
                 existing.composition = drug_class
-            # Backfill import_batch_id on enriched rows that have no batch yet
-            if not existing.import_batch_id:
-                existing.import_batch_id = batch_id
             skipped += 1
             med = existing
         else:
@@ -458,7 +331,7 @@ def upsert_medicines(
                 precautions=precautions_text,
                 usage_guidelines=usage_guidelines,
                 source_name=SOURCE_NAME,
-                import_batch_id=batch_id,   # ← uses committed batch.id
+                import_batch_id=IMPORT_BATCH,
             )
             db.add(med)
             inserted += 1
@@ -493,7 +366,7 @@ def upsert_medicines(
 
 
 # ---------------------------------------------------------------------------
-# 7. Insert symptom rules
+# 6. Insert symptom rules
 # ---------------------------------------------------------------------------
 
 def insert_symptom_rules(db: Session, rules: list[dict]) -> int:
@@ -522,38 +395,30 @@ def insert_symptom_rules(db: Session, rules: list[dict]) -> int:
 # Main
 # ---------------------------------------------------------------------------
 
-def main() -> None:
-    parser = argparse.ArgumentParser(description="Seed medicine catalog into the database.")
-    parser.add_argument("--force", action="store_true", help="Bypass idempotency guard and re-import")
-    args = parser.parse_args()
+# Threshold: if the DB already has more than this many medicines, skip seeding
+IDEMPOTENCY_THRESHOLD = 10
 
+
+def main():
     logger.info("=" * 60)
     logger.info("Smart Drug Safety — Full Data Seeder")
     logger.info("=" * 60)
 
     db: Session = SessionLocal()
-    batch: ImportBatch | None = None
-
     try:
-        # ── FK repair: heal any orphan import_batch_id references ─────────
-        # Runs on EVERY invocation — also when the idempotency guard triggers.
-        # Fixes existing deployments where medicines were seeded without a
-        # corresponding ImportBatch row (the old seed bug).
-        _repair_orphan_batch_refs(db)
-
         # ── Idempotency check ─────────────────────────────────────
+        from sqlalchemy import func, select as sa_select
         existing_count = db.scalar(sa_select(func.count()).select_from(Medicine)) or 0
-        if existing_count > IDEMPOTENCY_THRESHOLD and not args.force:
+        if existing_count > IDEMPOTENCY_THRESHOLD:
             logger.info(
-                "DB already contains %d medicines (threshold=%d). "
-                "Skipping full seed — idempotency guard triggered.",
+                "DB already contains %d medicines (threshold=%d). Skipping full seed — idempotency guard triggered.",
                 existing_count,
                 IDEMPOTENCY_THRESHOLD,
             )
             return
         logger.info("DB has %d medicines. Proceeding with full seed.", existing_count)
 
-        # ── Load all source files first (before any DB writes) ────
+        # ── Medicines ──────────────────────────────────────────────
         logger.info("[1/4] Loading dosage map from ab.xlsx ...")
         if AB_DOSAGE_FILE.exists():
             dosage_map = load_dosage_map(AB_DOSAGE_FILE)
@@ -563,7 +428,7 @@ def main() -> None:
             dosage_map = {}
 
         logger.info("[2/4] Loading medicine records from standalone A/B/C files ...")
-        abc_records: list[dict] = []
+        abc_records = []
         for f in DATA_FILES_ABC:
             if f.exists():
                 try:
@@ -576,7 +441,7 @@ def main() -> None:
                 logger.warning("      %s not found — skipped.", f.name)
 
         logger.info("[3/4] Loading medicine records from ZIP (D-Z) ...")
-        zip_records: list[dict] = []
+        zip_records = []
         if ZIP_FILE and ZIP_FILE.exists():
             try:
                 zip_records = load_zip_outputs(ZIP_FILE)
@@ -589,21 +454,9 @@ def main() -> None:
         all_records = abc_records + zip_records
         logger.info("      Total records to process: %d", len(all_records))
 
-        # ── Create ImportBatch FIRST and commit it ─────────────────
-        # This ensures the FK import_batches.id exists in PostgreSQL
-        # before any Medicine row references it.
-        batch = create_import_batch(db, records_total=len(all_records))
-
-        # ── Insert medicines using the committed batch.id ──────────
-        ins, skip = upsert_medicines(db, all_records, dosage_map, batch_id=batch.id)
+        ins, skip = upsert_medicines(db, all_records, dosage_map)
         db.commit()
         logger.info("      Inserted: %d  |  Enriched existing: %d", ins, skip)
-
-        # ── Mark batch as completed ────────────────────────────────
-        batch.status = "completed"
-        batch.records_imported = ins
-        db.commit()
-        logger.info("ImportBatch %s marked completed (%d imported).", batch.id, ins)
 
         # ── Symptom Rules ──────────────────────────────────────────
         logger.info("[4/4] Loading symptom rules from symptoms.xlsx ...")
@@ -620,9 +473,11 @@ def main() -> None:
             logger.warning("      %s not found — skipped.", SYMPTOMS_FILE)
 
         # ── Summary ────────────────────────────────────────────────
-        total_med = db.scalar(sa_select(func.count()).select_from(Medicine)) or 0
+        from app.models.medicine import Medicine as M
+        from app.models.symptom import SymptomRule as SR
+        total_med = db.query(M).count()
         total_alias = db.query(MedicineAlias).count()
-        total_sym = db.query(SymptomRule).count()
+        total_sym = db.query(SR).count()
         logger.info("=" * 60)
         logger.info("  Medicines in DB : %d", total_med)
         logger.info("  Aliases in DB   : %d", total_alias)
@@ -632,15 +487,6 @@ def main() -> None:
 
     except Exception as e:
         db.rollback()
-        # Mark the batch as failed if it was created
-        if batch is not None:
-            try:
-                batch.status = "failed"
-                batch.errors = str(e)[:500]
-                db.commit()
-                logger.error("ImportBatch %s marked as failed.", batch.id)
-            except Exception:
-                pass  # Don't mask the original error
         logger.exception("Seeding failed: %s", e)
         sys.exit(1)
     finally:
