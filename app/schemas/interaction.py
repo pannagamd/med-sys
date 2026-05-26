@@ -4,7 +4,7 @@ from pydantic import BaseModel, Field
 
 from app.schemas.common import MEDICAL_DISCLAIMER, SourceInfo
 
-Severity = Literal["safe", "moderate", "dangerous", "unknown"]
+Severity = Literal["safe", "moderate", "high", "dangerous", "unknown"]
 
 
 class InteractionAnalyzeRequest(BaseModel):

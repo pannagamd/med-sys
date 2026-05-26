@@ -5,13 +5,14 @@ into the database.
 Usage (from the ProjectFixed folder):
     python scripts/seed_data.py
 
-Files expected at the project root:
-  - All_A_Medicines_With_Food_Interactions.xlsx   (standalone A)
-  - All_B_Medicines_With_Food_Interactions.xlsx   (standalone B)
-  - All_C_Medicines_With_Food_Interactions.xlsx   (standalone C)
-  - workspace-*.zip                               (D-Z letters)
-  - ab.xlsx                                       (dosage data)
-  - symptoms.xlsx                                 (symptom rules)
+Files expected inside checkfordata/ (project root subfolder):
+  - checkfordata/All_A_Medicines_With_Food_Interactions.xlsx   (standalone A)
+  - checkfordata/All_B_Medicines_With_Food_Interactions.xlsx   (standalone B)
+  - checkfordata/All_C_Medicines_With_Food_Interactions.xlsx   (standalone C)
+  - checkfordata/ab.xlsx                                       (dosage data A-Z)
+  - checkfordata/drug-drug-interactions-formatted.xlsx         (drug interactions)
+  - workspace-*.zip                                            (D-Z letters, at root)
+  - symptoms.xlsx                                              (symptom rules, at root)
 
 Idempotency: if the database already contains more than 10 medicines the script
 exits early, so it is safe to run on every container start without re-seeding.
@@ -47,14 +48,19 @@ from app.models.symptom import SymptomRule
 # File paths — edit these if your files are stored elsewhere
 # ---------------------------------------------------------------------------
 BASE = Path(__file__).resolve().parent.parent
+CHECKFORDATA = BASE / "checkfordata"
 
+# Medicine catalog files — now read from checkfordata/ subfolder
 DATA_FILES_ABC = [
-    BASE / "All_A_Medicines_With_Food_Interactions.xlsx",
-    BASE / "All_B_Medicines_With_Food_Interactions.xlsx",
-    BASE / "All_C_Medicines_With_Food_Interactions.xlsx",
+    CHECKFORDATA / "All_A_Medicines_With_Food_Interactions.xlsx",
+    CHECKFORDATA / "All_B_Medicines_With_Food_Interactions.xlsx",
+    CHECKFORDATA / "All_C_Medicines_With_Food_Interactions.xlsx",
 ]
+# ZIP file for D-Z medicines — still expected at project root (original location)
 ZIP_FILE = next(BASE.glob("workspace-*.zip"), None)
-AB_DOSAGE_FILE = BASE / "ab.xlsx"
+# Dosage reference — now read from checkfordata/ subfolder
+AB_DOSAGE_FILE = CHECKFORDATA / "ab.xlsx"
+# Symptoms file — remains at project root (only copy)
 SYMPTOMS_FILE = BASE / "symptoms.xlsx"
 
 SOURCE_NAME = "drugs.com"
@@ -282,19 +288,20 @@ def upsert_medicines(db: Session, records: list[dict], dosage_map: dict[str, dic
 
         dos = dosage_map.get(generic.lower(), {})
 
-        # Build usage_guidelines from symptoms + diseases + foods
+        # Build usage_guidelines from symptoms + diseases + dosage (NOT foods)
         usage_parts = []
         if rec.get("symptoms"):
             usage_parts.append(f"Symptoms: {rec['symptoms']}")
         if rec.get("diseases"):
             usage_parts.append(f"Conditions: {rec['diseases']}")
-        if rec.get("foods_to_avoid"):
-            usage_parts.append(f"Foods to avoid: {rec['foods_to_avoid']}")
         if dos.get("common_dose"):
             usage_parts.append(f"Common dosage: {dos['common_dose']}")
         if dos.get("adult_dose"):
             usage_parts.append(f"Adult dose: {dos['adult_dose']}")
         usage_guidelines = "\n".join(usage_parts) if usage_parts else None
+
+        # Foods to avoid stored in the dedicated precautions field
+        precautions_text = rec.get("foods_to_avoid")
 
         # Build dosage_form / strength from drug_class
         drug_class = rec.get("drug_class")
@@ -303,6 +310,8 @@ def upsert_medicines(db: Session, records: list[dict], dosage_map: dict[str, dic
             # Enrich existing record with missing data
             if not existing.usage_guidelines and usage_guidelines:
                 existing.usage_guidelines = usage_guidelines
+            if not existing.precautions and precautions_text:
+                existing.precautions = precautions_text
             if not existing.side_effects and rec.get("side_effects"):
                 existing.side_effects = rec["side_effects"]
             if not existing.contraindications and rec.get("contraindications"):
@@ -319,6 +328,7 @@ def upsert_medicines(db: Session, records: list[dict], dosage_map: dict[str, dic
                 composition=drug_class,
                 side_effects=rec.get("side_effects"),
                 contraindications=rec.get("contraindications"),
+                precautions=precautions_text,
                 usage_guidelines=usage_guidelines,
                 source_name=SOURCE_NAME,
                 import_batch_id=IMPORT_BATCH,
