@@ -1,3 +1,4 @@
+import json
 from functools import lru_cache
 
 from pydantic import Field, field_validator
@@ -20,6 +21,8 @@ class Settings(BaseSettings):
         "http://127.0.0.1:3000",
         "http://127.0.0.1:5173",
         "http://127.0.0.1:5174",
+        # Production: add your deployed frontend URL here or set CORS_ORIGINS env var in Render
+        "https://smart-drug-safety-api.onrender.com",
     ]
 
     # Firebase Admin SDK (backend token verification)
@@ -37,11 +40,27 @@ class Settings(BaseSettings):
     seed_admin_full_name: str = "System Admin"
     seed_admin_password: str = "admin123"
 
+    @field_validator("database_url", mode="before")
+    @classmethod
+    def normalise_database_url(cls, value: str) -> str:
+        # Render supplies postgresql:// or postgres://, but psycopg v3 requires
+        # the postgresql+psycopg:// scheme. Normalise here so the Render env var
+        # can be pasted as-is without manual editing.
+        if isinstance(value, str):
+            if value.startswith("postgres://"):
+                value = "postgresql+psycopg://" + value[len("postgres://"):]
+            elif value.startswith("postgresql://"):
+                value = "postgresql+psycopg://" + value[len("postgresql://"):]
+        return value
+
     @field_validator("cors_origins", mode="before")
     @classmethod
     def parse_cors_origins(cls, value: str | list[str]) -> list[str]:
         if isinstance(value, str):
-            return [origin.strip() for origin in value.split(",") if origin.strip()]
+            stripped = value.strip()
+            if stripped.startswith("["):  # JSON array format
+                return json.loads(stripped)
+            return [origin.strip() for origin in stripped.split(",") if origin.strip()]
         return value
 
 

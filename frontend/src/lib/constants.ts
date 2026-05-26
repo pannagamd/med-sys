@@ -25,15 +25,15 @@ export const routeTitles: Record<string, string> = {
 
 export const featureHighlights = [
   {
-    title: 'Live medicine search',
-    description: 'Search local records with instant filters, soft loading states, and polished result cards.',
+    title: 'Drug Interaction Detection',
+    description: 'Instantly identify dangerous medicine combinations. Know which drugs should never be taken together and understand why.',
   },
   {
-    title: 'Interaction analysis',
-    description: 'Compare multiple medicines with clear severity indicators, explanations, and warnings.',
+    title: 'Side Effect Insights',
+    description: 'Learn about possible reactions, precautions, and warnings before taking any medication. Stay prepared and informed.',
   },
   {
-    title: 'Pregnancy-aware safety',
-    description: 'Respect profile context and surface conservative guidance for women who are pregnant.',
+    title: 'Smart Medicine Search',
+    description: 'Find detailed dosage, usage, and safety information for any medicine quickly. Get clear, actionable guidance.',
   },
 ];

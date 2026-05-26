@@ -84,7 +84,8 @@ docker compose up --build
 ```
 
 The compose setup starts PostgreSQL, applies migrations, seeds the starter admin and symptom
-rules, then runs the API at `http://127.0.0.1:8000`.
+rules, imports the packaged sample medicine and interaction datasets, then runs the API at
+`http://127.0.0.1:8000`.
 
 Default seeded admin values are controlled by:
 
@@ -93,6 +94,20 @@ Default seeded admin values are controlled by:
 - `SEED_ADMIN_FULL_NAME`
 
 Change these in `.env` before deploying anywhere beyond local development.
+
+## Deployment Verification Checklist
+
+Use this after every production deploy:
+
+- Frontend reachable
+- Backend reachable
+- Database connected
+- Authentication works
+- Medicine search returns results
+- Dosage and detail views render correctly
+- Refresh persistence works
+- No browser console errors
+- No failed API requests in the network panel
 
 ## Data Policy
 

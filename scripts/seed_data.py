@@ -1,20 +1,24 @@
 """
 Seed script: loads all medicine and symptom data from the provided Excel files
-into the SQLite database.
+into the database.
 
 Usage (from the ProjectFixed folder):
     python scripts/seed_data.py
 
-Files expected (place them alongside this script or use full paths below):
+Files expected at the project root:
   - All_A_Medicines_With_Food_Interactions.xlsx   (standalone A)
   - All_B_Medicines_With_Food_Interactions.xlsx   (standalone B)
   - All_C_Medicines_With_Food_Interactions.xlsx   (standalone C)
-  - workspace-*.zip                               (D–Z letters)
+  - workspace-*.zip                               (D-Z letters)
   - ab.xlsx                                       (dosage data)
   - symptoms.xlsx                                 (symptom rules)
+
+Idempotency: if the database already contains more than 10 medicines the script
+exits early, so it is safe to run on every container start without re-seeding.
 """
 
 import io
+import logging
 import sys
 import uuid
 import zipfile
@@ -24,6 +28,13 @@ from pathlib import Path
 # Allow running from project root: python scripts/seed_data.py
 # ---------------------------------------------------------------------------
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
+# Configure logging so output is visible in Docker/Render logs
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s %(levelname)s [seed_data] %(message)s",
+)
+logger = logging.getLogger(__name__)
 
 from openpyxl import load_workbook
 from sqlalchemy.orm import Session
@@ -374,74 +385,99 @@ def insert_symptom_rules(db: Session, rules: list[dict]) -> int:
 # Main
 # ---------------------------------------------------------------------------
 
+# Threshold: if the DB already has more than this many medicines, skip seeding
+IDEMPOTENCY_THRESHOLD = 10
+
+
 def main():
-    print("=" * 60)
-    print("Smart Drug Safety — Data Seeder")
-    print("=" * 60)
+    logger.info("=" * 60)
+    logger.info("Smart Drug Safety — Full Data Seeder")
+    logger.info("=" * 60)
 
     db: Session = SessionLocal()
     try:
+        # ── Idempotency check ─────────────────────────────────────
+        from sqlalchemy import func, select as sa_select
+        existing_count = db.scalar(sa_select(func.count()).select_from(Medicine)) or 0
+        if existing_count > IDEMPOTENCY_THRESHOLD:
+            logger.info(
+                "DB already contains %d medicines (threshold=%d). Skipping full seed — idempotency guard triggered.",
+                existing_count,
+                IDEMPOTENCY_THRESHOLD,
+            )
+            return
+        logger.info("DB has %d medicines. Proceeding with full seed.", existing_count)
+
         # ── Medicines ──────────────────────────────────────────────
-        print("\n[1/4] Loading dosage map from ab.xlsx …")
+        logger.info("[1/4] Loading dosage map from ab.xlsx ...")
         if AB_DOSAGE_FILE.exists():
             dosage_map = load_dosage_map(AB_DOSAGE_FILE)
-            print(f"      {len(dosage_map)} dosage entries loaded.")
+            logger.info("      %d dosage entries loaded.", len(dosage_map))
         else:
-            print(f"      WARNING: {AB_DOSAGE_FILE} not found. Dosage data skipped.")
+            logger.warning("      %s not found. Dosage data skipped.", AB_DOSAGE_FILE)
             dosage_map = {}
 
-        print("\n[2/4] Loading medicine records from standalone A/B/C files …")
+        logger.info("[2/4] Loading medicine records from standalone A/B/C files ...")
         abc_records = []
         for f in DATA_FILES_ABC:
             if f.exists():
-                recs = load_abc_file(f)
-                print(f"      {f.name}: {len(recs)} medicines")
-                abc_records.extend(recs)
+                try:
+                    recs = load_abc_file(f)
+                    logger.info("      %s: %d medicines", f.name, len(recs))
+                    abc_records.extend(recs)
+                except Exception as exc:
+                    logger.warning("      Skipping %s due to error: %s", f.name, exc)
             else:
-                print(f"      WARNING: {f.name} not found — skipped.")
+                logger.warning("      %s not found — skipped.", f.name)
 
-        print("\n[3/4] Loading medicine records from ZIP (D–Z) …")
+        logger.info("[3/4] Loading medicine records from ZIP (D-Z) ...")
         zip_records = []
         if ZIP_FILE and ZIP_FILE.exists():
-            zip_records = load_zip_outputs(ZIP_FILE)
-            print(f"      {len(zip_records)} medicines loaded from ZIP.")
+            try:
+                zip_records = load_zip_outputs(ZIP_FILE)
+                logger.info("      %d medicines loaded from ZIP.", len(zip_records))
+            except Exception as exc:
+                logger.warning("      ZIP load failed: %s — skipped.", exc)
         else:
-            print("      WARNING: ZIP file not found — skipped.")
+            logger.warning("      ZIP file not found — skipped.")
 
         all_records = abc_records + zip_records
-        print(f"\n      Total records to process: {len(all_records)}")
+        logger.info("      Total records to process: %d", len(all_records))
 
         ins, skip = upsert_medicines(db, all_records, dosage_map)
         db.commit()
-        print(f"      ✓ Inserted: {ins}  |  Enriched existing: {skip}")
+        logger.info("      Inserted: %d  |  Enriched existing: %d", ins, skip)
 
         # ── Symptom Rules ──────────────────────────────────────────
-        print("\n[4/4] Loading symptom rules from symptoms.xlsx …")
+        logger.info("[4/4] Loading symptom rules from symptoms.xlsx ...")
         if SYMPTOMS_FILE.exists():
-            rules = load_symptom_rules(SYMPTOMS_FILE)
-            print(f"      {len(rules)} rules parsed.")
-            rule_count = insert_symptom_rules(db, rules)
-            db.commit()
-            print(f"      ✓ Inserted: {rule_count} symptom rules.")
+            try:
+                rules = load_symptom_rules(SYMPTOMS_FILE)
+                logger.info("      %d rules parsed.", len(rules))
+                rule_count = insert_symptom_rules(db, rules)
+                db.commit()
+                logger.info("      Inserted: %d symptom rules.", rule_count)
+            except Exception as exc:
+                logger.warning("      Symptom rules load failed: %s — skipped.", exc)
         else:
-            print(f"      WARNING: {SYMPTOMS_FILE} not found — skipped.")
+            logger.warning("      %s not found — skipped.", SYMPTOMS_FILE)
 
-        print("\n" + "=" * 60)
+        # ── Summary ────────────────────────────────────────────────
         from app.models.medicine import Medicine as M
         from app.models.symptom import SymptomRule as SR
-        total_med  = db.query(M).count()
+        total_med = db.query(M).count()
         total_alias = db.query(MedicineAlias).count()
-        total_sym  = db.query(SR).count()
-        print(f"  Medicines in DB : {total_med}")
-        print(f"  Aliases in DB   : {total_alias}")
-        print(f"  Symptom rules   : {total_sym}")
-        print("=" * 60)
-        print("  Seeding complete!")
+        total_sym = db.query(SR).count()
+        logger.info("=" * 60)
+        logger.info("  Medicines in DB : %d", total_med)
+        logger.info("  Aliases in DB   : %d", total_alias)
+        logger.info("  Symptom rules   : %d", total_sym)
+        logger.info("=" * 60)
+        logger.info("  Seeding complete!")
 
     except Exception as e:
         db.rollback()
-        print(f"\nERROR: {e}")
-        import traceback; traceback.print_exc()
+        logger.exception("Seeding failed: %s", e)
         sys.exit(1)
     finally:
         db.close()

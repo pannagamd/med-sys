@@ -7,6 +7,8 @@ interface AuthState {
   accessToken: string | null;
   refreshToken: string | null;
   user: User | null;
+  // authReady is NOT persisted — it resets to false on every page load and is
+  // set to true once the AuthBootstrap hydration resolves (success or failure).
   authReady: boolean;
   setSession: (payload: TokenPair, user?: User | null) => void;
   setUser: (user: User | null) => void;
@@ -21,18 +23,28 @@ export const useAuthStore = create<AuthState>()(
       refreshToken: null,
       user: null,
       authReady: false,
+
       setSession: (payload, user = null) =>
         set({
           accessToken: payload.access_token,
           refreshToken: payload.refresh_token,
           user,
         }),
+
       setUser: (user) => set({ user }),
-      clearSession: () => set({ accessToken: null, refreshToken: null, user: null, authReady: true }),
+
+      // clearSession wipes tokens and marks auth as ready (so the spinner hides
+      // and the router can redirect to login).
+      clearSession: () =>
+        set({ accessToken: null, refreshToken: null, user: null, authReady: true }),
+
       setAuthReady: (ready) => set({ authReady: ready }),
     }),
     {
       name: 'medipulse-auth',
+      // Only persist tokens and user identity — NOT authReady.
+      // authReady must always start as false on a fresh page load so
+      // AuthBootstrap can run its validation flow.
       partialize: (state) => ({
         accessToken: state.accessToken,
         refreshToken: state.refreshToken,

@@ -1,3 +1,5 @@
+import logging
+
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
@@ -7,6 +9,8 @@ from app.models.user import User
 from app.schemas.interaction import InteractionAnalyzeRequest, InteractionAnalyzeResponse
 from app.services.audit_service import AuditService
 from app.services.interaction_service import InteractionService
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -19,6 +23,22 @@ def analyze_interactions(
 ) -> InteractionAnalyzeResponse:
     user_id = current_user.id if payload.include_profile_context else None
     results, resolved, warnings, overall = InteractionService(db).analyze(payload.medicines, user_id=user_id)
+
+    logger.info(
+        "Interaction analysis: medicines=%d resolved=%d results=%d warnings=%d severity=%r",
+        len(payload.medicines),
+        len(resolved),
+        len(results),
+        len(warnings),
+        overall,
+    )
+    if len(resolved) < len(payload.medicines):
+        logger.warning(
+            "Could not resolve all medicines: requested=%d resolved=%d — DB may have insufficient data",
+            len(payload.medicines),
+            len(resolved),
+        )
+
     AuditService(db).record(
         "interactions.analyze",
         actor_user_id=current_user.id,
