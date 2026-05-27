@@ -155,6 +155,7 @@ export interface ImportBatch {
   records_total: number;
   records_imported: number;
   errors: string | null;
+  status: string;
 }
 
 export interface ImportResult {

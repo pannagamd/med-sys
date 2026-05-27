@@ -9,6 +9,7 @@ class ImportBatchRead(BaseModel):
     records_total: int
     records_imported: int
     errors: str | None
+    status: str = "completed"
 
     model_config = {"from_attributes": True}
 

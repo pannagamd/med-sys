@@ -18,6 +18,7 @@ class ImportBatch(Base):
     records_total: Mapped[int] = mapped_column(default=0, nullable=False)
     records_imported: Mapped[int] = mapped_column(default=0, nullable=False)
     errors: Mapped[str | None] = mapped_column(Text)
+    status: Mapped[str] = mapped_column(String(20), nullable=False, default="completed")
     created_by_user_id: Mapped[str | None] = mapped_column(String(36))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
 
