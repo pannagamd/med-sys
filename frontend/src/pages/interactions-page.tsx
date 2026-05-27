@@ -14,7 +14,7 @@ import { analyzeInteractions } from '@/services/api/interactions';
 import { getApiErrorMessage } from '@/services/api/client';
 import { addHistoryItem } from '@/lib/history';
 import { parseListInput } from '@/lib/parsers';
-import { severityBadgeVariant, severityLabel, severityTone } from '@/lib/severity';
+import { severityBadgeVariant, severityDescription, severityLabel, severityTone } from '@/lib/severity';
 import type { InteractionAnalyzeResponse, Severity } from '@/types/api';
 
 const interactionSchema = z.object({ medicines: z.string().min(3, 'Add at least two medicines') });
@@ -187,16 +187,12 @@ export function InteractionsPage() {
                 <p className="text-xs font-bold uppercase tracking-[0.28em] text-slate-600">Overall Risk Level</p>
                 <p className="mt-1.5 text-3xl font-bold text-slate-950">{severityLabel(result.overall_severity)}</p>
                 <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-700">
-                  {result.overall_severity === 'dangerous' 
-                    ? 'High-risk interactions detected. Review all recommendations and consult a healthcare provider before taking these medicines together.' 
-                    : result.overall_severity === 'moderate'
-                    ? 'Moderate interactions found. Review recommendations and discuss with your pharmacist or doctor before combining these medicines.'
-                    : 'Low-risk interactions. Still review individual recommendations and check your allergy/condition profile.'}
+                  {severityDescription(result.overall_severity)}
                 </p>
               </div>
               <Badge variant={severityBadgeVariant(result.overall_severity)} className="w-fit px-4 py-2 text-sm shrink-0">
                 <ShieldAlert className="h-4 w-4" />
-                {result.overall_severity}
+                {severityLabel(result.overall_severity)}
               </Badge>
             </CardContent>
           </Card>

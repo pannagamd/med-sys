@@ -1,4 +1,4 @@
-export type Severity = 'safe' | 'moderate' | 'dangerous' | 'unknown';
+export type Severity = 'safe' | 'moderate' | 'high' | 'dangerous' | 'unknown';
 
 export interface ApiErrorShape {
   detail?: string | { message?: string } | Array<{ msg: string }>;
