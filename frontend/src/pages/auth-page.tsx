@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { z } from 'zod';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { ArrowRight, Lock, Phone, Sparkles, User } from 'lucide-react';
+import { ArrowRight, Lock, Phone, Pill, User } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 
@@ -15,33 +15,122 @@ import { login, register, getCurrentUser } from '@/services/api/auth';
 import { useAuthStore } from '@/store/auth-store';
 import { getApiErrorMessage } from '@/services/api/client';
 
+// ─── Shared helpers ────────────────────────────────────────────────────────────
+
+/** Validates a raw 10-digit Indian mobile number (no prefix). */
+const indianMobileDigits = z
+  .string()
+  .regex(/^\d{10}$/, 'Enter exactly 10 digits (Indian mobile number)')
+  .refine((v) => /^[6-9]/.test(v), 'Indian mobile numbers must start with 6, 7, 8, or 9');
+
+/** Converts the 10-digit raw value to E.164 (+91XXXXXXXXXX). */
+function toE164(digits: string): string {
+  return `+91${digits.replace(/\D/g, '')}`;
+}
+
 // ─── Schemas ─────────────────────────────────────────────────────────────────
 
 const loginSchema = z.object({
-  username: z
-    .string()
-    .min(7, 'Enter your phone number')
-    .regex(/^\+[1-9]\d{6,14}$/, 'Use international format, e.g. +14155552671'),
+  phone_digits: indianMobileDigits,
   password: z.string().min(6, 'Password must be at least 6 characters'),
 });
 
-const registerSchema = z.object({
-  full_name: z.string().min(2, 'Enter your full name').max(255),
-  phone_number: z
-    .string()
-    .min(7, 'Enter your phone number')
-    .regex(/^\+[1-9]\d{6,14}$/, 'Use international format, e.g. +14155552671'),
-  password: z.string().min(6, 'Password must be at least 6 characters'),
-  confirm_password: z.string(),
-}).refine((d) => d.password === d.confirm_password, {
-  message: 'Passwords do not match',
-  path: ['confirm_password'],
-});
+const registerSchema = z
+  .object({
+    full_name: z.string().min(2, 'Enter your full name').max(255),
+    phone_digits: indianMobileDigits,
+    password: z.string().min(6, 'Password must be at least 6 characters'),
+    confirm_password: z.string(),
+  })
+  .refine((d) => d.password === d.confirm_password, {
+    message: 'Passwords do not match',
+    path: ['confirm_password'],
+  });
 
 type LoginValues = z.infer<typeof loginSchema>;
 type RegisterValues = z.infer<typeof registerSchema>;
 
-// ─── Component ───────────────────────────────────────────────────────────────
+// ─── IndianPhoneInput ──────────────────────────────────────────────────────────
+
+/**
+ * Renders a phone input with a fixed, non-editable "+91" prefix badge and a
+ * 10-digit text input. Accepts only digit keypresses; ignores everything else.
+ */
+function IndianPhoneInput({
+  id,
+  value,
+  onChange,
+  onBlur,
+  name,
+  error,
+}: {
+  id: string;
+  value: string;
+  onChange: (v: string) => void;
+  onBlur: () => void;
+  name: string;
+  error?: string;
+}) {
+  function handleInput(e: React.ChangeEvent<HTMLInputElement>) {
+    // Strip everything that isn't a digit, then cap at 10 chars
+    const digits = e.target.value.replace(/\D/g, '').slice(0, 10);
+    onChange(digits);
+  }
+
+  function handleKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
+    // Allow: Backspace, Delete, Tab, arrows, digits, Ctrl+A/C/V/X
+    const allowed = [
+      'Backspace', 'Delete', 'Tab', 'ArrowLeft', 'ArrowRight', 'Home', 'End',
+    ];
+    const isDigit = /^\d$/.test(e.key);
+    const isCtrl = e.ctrlKey || e.metaKey;
+    if (!isDigit && !allowed.includes(e.key) && !isCtrl) {
+      e.preventDefault();
+    }
+  }
+
+  return (
+    <div className="space-y-1">
+      <div
+        className={`flex h-10 w-full overflow-hidden rounded-xl border bg-white ring-offset-background transition focus-within:ring-2 focus-within:ring-teal-400 focus-within:ring-offset-1 ${
+          error ? 'border-rose-400' : 'border-input'
+        }`}
+      >
+        {/* Fixed "+91" prefix — non-editable, visually separated */}
+        <div className="flex shrink-0 items-center gap-1.5 border-r border-border/60 bg-teal-50 px-3">
+          <Phone className="h-3.5 w-3.5 text-teal-600" />
+          <span className="select-none font-semibold text-teal-700 text-sm">+91</span>
+        </div>
+
+        {/* 10-digit input */}
+        <input
+          id={id}
+          name={name}
+          type="tel"
+          inputMode="numeric"
+          maxLength={10}
+          autoComplete="tel-national"
+          placeholder="9876543210"
+          value={value}
+          onChange={handleInput}
+          onKeyDown={handleKeyDown}
+          onBlur={onBlur}
+          className="flex-1 bg-transparent px-3 text-sm outline-none placeholder:text-muted-foreground"
+        />
+
+        {/* Character counter */}
+        <div className="flex shrink-0 items-center pr-3">
+          <span className={`text-xs tabular-nums ${value.length === 10 ? 'text-teal-600 font-semibold' : 'text-muted-foreground'}`}>
+            {value.length}/10
+          </span>
+        </div>
+      </div>
+      {error && <p className="text-sm text-rose-600">{error}</p>}
+    </div>
+  );
+}
+
+// ─── AuthPage ─────────────────────────────────────────────────────────────────
 
 export function AuthPage() {
   const navigate = useNavigate();
@@ -51,17 +140,18 @@ export function AuthPage() {
 
   const loginForm = useForm<LoginValues>({
     resolver: zodResolver(loginSchema),
-    defaultValues: { username: '+1', password: '' },
+    defaultValues: { phone_digits: '', password: '' },
   });
 
   const registerForm = useForm<RegisterValues>({
     resolver: zodResolver(registerSchema),
-    defaultValues: { full_name: '', phone_number: '+1', password: '', confirm_password: '' },
+    defaultValues: { full_name: '', phone_digits: '', password: '', confirm_password: '' },
   });
 
   async function handleLogin(values: LoginValues) {
     try {
-      const session = await login({ username: values.username, password: values.password });
+      const phone = toE164(values.phone_digits);
+      const session = await login({ username: phone, password: values.password });
       setSession(session, session.user);
       const user = await getCurrentUser();
       setUser(user);
@@ -74,9 +164,10 @@ export function AuthPage() {
 
   async function handleRegister(values: RegisterValues) {
     try {
+      const phone = toE164(values.phone_digits);
       const session = await register({
         full_name: values.full_name,
-        phone_number: values.phone_number,
+        phone_number: phone,
         password: values.password,
       });
       setSession(session, session.user);
@@ -95,7 +186,7 @@ export function AuthPage() {
         <CardHeader className="pb-2">
           <div className="mb-2 flex items-center justify-between gap-4">
             <Link to="/" className="inline-flex items-center gap-2 text-sm font-semibold uppercase tracking-[0.28em] text-teal-700">
-              <Sparkles className="h-4 w-4" />
+              <Pill className="h-4 w-4" />
               {APP_NAME}
             </Link>
             <Button asChild variant="outline" size="sm">
@@ -107,8 +198,8 @@ export function AuthPage() {
           </CardTitle>
           <CardDescription>
             {mode === 'login'
-              ? 'Sign in with your phone number and password.'
-              : 'Register with your phone number to get started.'}
+              ? 'Sign in with your Indian mobile number and password.'
+              : 'Register with your Indian mobile number to get started.'}
           </CardDescription>
         </CardHeader>
 
@@ -145,22 +236,18 @@ export function AuthPage() {
           {mode === 'login' && (
             <form className="space-y-5" onSubmit={loginForm.handleSubmit(handleLogin)}>
               <div className="space-y-2">
-                <Label htmlFor="login-username">Phone number</Label>
-                <div className="relative">
-                  <Phone className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                  <Input
-                    id="login-username"
-                    type="tel"
-                    className="pl-10"
-                    placeholder="+14155552671"
-                    autoComplete="tel"
-                    {...loginForm.register('username')}
-                  />
-                </div>
-                <p className="text-xs text-muted-foreground">Include country code (E.164), e.g. +1 for US, +91 for India.</p>
-                {loginForm.formState.errors.username && (
-                  <p className="text-sm text-rose-600">{loginForm.formState.errors.username.message}</p>
-                )}
+                <Label htmlFor="login-phone">Mobile number (India)</Label>
+                <IndianPhoneInput
+                  id="login-phone"
+                  name="phone_digits"
+                  value={loginForm.watch('phone_digits')}
+                  onChange={(v) => loginForm.setValue('phone_digits', v, { shouldValidate: true })}
+                  onBlur={() => loginForm.trigger('phone_digits')}
+                  error={loginForm.formState.errors.phone_digits?.message}
+                />
+                <p className="text-xs text-muted-foreground">
+                  Enter your 10-digit Indian mobile number. The +91 country code is fixed.
+                </p>
               </div>
 
               <div className="space-y-2">
@@ -183,7 +270,7 @@ export function AuthPage() {
 
               <Button
                 type="submit"
-                className="w-full"
+                className="w-full bg-teal-600 hover:bg-teal-700"
                 size="lg"
                 disabled={loginForm.formState.isSubmitting}
               >
@@ -214,22 +301,18 @@ export function AuthPage() {
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="reg-phone">Phone number</Label>
-                <div className="relative">
-                  <Phone className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                  <Input
-                    id="reg-phone"
-                    type="tel"
-                    className="pl-10"
-                    placeholder="+14155552671"
-                    autoComplete="tel"
-                    {...registerForm.register('phone_number')}
-                  />
-                </div>
-                <p className="text-xs text-muted-foreground">Include country code (E.164), e.g. +1 for US, +91 for India.</p>
-                {registerForm.formState.errors.phone_number && (
-                  <p className="text-sm text-rose-600">{registerForm.formState.errors.phone_number.message}</p>
-                )}
+                <Label htmlFor="reg-phone">Mobile number (India)</Label>
+                <IndianPhoneInput
+                  id="reg-phone"
+                  name="phone_digits"
+                  value={registerForm.watch('phone_digits')}
+                  onChange={(v) => registerForm.setValue('phone_digits', v, { shouldValidate: true })}
+                  onBlur={() => registerForm.trigger('phone_digits')}
+                  error={registerForm.formState.errors.phone_digits?.message}
+                />
+                <p className="text-xs text-muted-foreground">
+                  Enter your 10-digit Indian mobile number. The +91 country code is fixed.
+                </p>
               </div>
 
               <div className="space-y-2">
@@ -270,7 +353,7 @@ export function AuthPage() {
 
               <Button
                 type="submit"
-                className="w-full"
+                className="w-full bg-teal-600 hover:bg-teal-700"
                 size="lg"
                 disabled={registerForm.formState.isSubmitting}
               >

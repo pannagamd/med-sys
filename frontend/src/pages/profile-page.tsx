@@ -19,7 +19,7 @@ import type { HealthProfile } from '@/types/api';
 
 export function ProfilePage() {
   const user = useAuthStore((state) => state.user);
-  const { setProfile } = useProfileStore();
+  const { profile: storedProfile, setProfile } = useProfileStore();
 
   const form = useForm<HealthProfile>({
     defaultValues: {
@@ -33,18 +33,31 @@ export function ProfilePage() {
   const isFemale = gender?.toLowerCase() === 'female';
 
   useEffect(() => {
-    async function loadProfile() {
+    // ── Step 1: Populate immediately from the global store (already fetched
+    //   by AuthBootstrap after login / token restore). This prevents the
+    //   blank-form flicker on every navigation to this page.
+    if (storedProfile) {
+      form.reset(storedProfile);
+    }
+
+    // ── Step 2: Sync with the backend to catch any changes made in another
+    //   session or tab. This is non-blocking for the initial render.
+    async function refreshFromApi() {
       try {
         const current = await getProfile();
         if (current) {
           form.reset(current);
+          // Keep the store in sync too
+          setProfile(current);
         }
       } catch {
-        // No profile yet — form remains empty and ready for first-time input.
+        // Backend unreachable or profile doesn't exist yet — keep the
+        // store-populated values already in the form.
       }
     }
-    loadProfile();
-  }, [form]);
+    refreshFromApi();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // Run once on mount — storedProfile from Zustand is accessed inside via closure
 
   async function handleSave(values: HealthProfile) {
     // Clear pregnancy flag when gender is not female

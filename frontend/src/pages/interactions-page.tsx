@@ -234,8 +234,6 @@ export function InteractionsPage() {
 
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {result.results.map((item, index) => {
-              const hasConfidence = item.confidence > 0;
-              const hasSources = item.sources.length > 0;
               const hasMechanism = item.mechanism && item.mechanism.trim() !== '';
               const hasRecommendations = item.recommendations.length > 0;
 
@@ -269,24 +267,6 @@ export function InteractionsPage() {
                       </div>
                     )}
 
-                    {/* Confidence & Sources - only show if meaningful */}
-                    {(hasConfidence || hasSources) && (
-                      <div className="grid grid-cols-2 gap-2">
-                        {hasConfidence && (
-                          <div className="rounded bg-slate-50 border border-slate-200/60 p-2">
-                            <p className="text-xs font-semibold text-slate-600">Confidence</p>
-                            <p className="text-sm font-bold text-slate-900 mt-0.5">{Math.round(item.confidence * 100)}%</p>
-                          </div>
-                        )}
-                        {hasSources && (
-                          <div className="rounded bg-teal-50 border border-teal-200/60 p-2">
-                            <p className="text-xs font-semibold text-teal-600">Sources</p>
-                            <p className="text-sm font-bold text-teal-900 mt-0.5">{item.sources.length}</p>
-                          </div>
-                        )}
-                      </div>
-                    )}
-
                     {/* Recommendations */}
                     {hasRecommendations && (
                       <div>
@@ -294,22 +274,11 @@ export function InteractionsPage() {
                         <ul className="space-y-1">
                           {item.recommendations.map((recommendation) => (
                             <li key={recommendation} className="flex gap-2 text-slate-700 text-xs">
-                              <span className="text-teal-600 font-bold shrink-0">•</span>
+                              <span className="text-teal-600 font-bold shrink-0">&bull;</span>
                               <span>{recommendation}</span>
                             </li>
                           ))}
                         </ul>
-                      </div>
-                    )}
-
-                    {/* Sources list - only if meaningful */}
-                    {hasSources && (
-                      <div className="flex flex-wrap gap-1.5 pt-1">
-                        {item.sources.map((source, sourceIndex) => (
-                          <Badge key={`${source.name}-${sourceIndex}`} variant="outline" className="text-xs">
-                            {source.name}
-                          </Badge>
-                        ))}
                       </div>
                     )}
                   </CardContent>

@@ -1,6 +1,6 @@
 import { useState } from 'react';
-import { Activity, FileClock, LogOut, Menu, Search, ShieldPlus, Sparkles, UserRound, Stethoscope, WandSparkles, Home } from 'lucide-react';
-import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
+import { Activity, FileClock, LogOut, Menu, Pill, Search, Sparkles, UserRound, Stethoscope, WandSparkles, Home } from 'lucide-react';
+import { Link, NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 
 import { APP_NAME, routeTitles } from '@/lib/constants';
@@ -53,14 +53,14 @@ export function AppShell() {
     <div className="min-h-screen bg-[radial-gradient(circle_at_top_left,rgba(20,184,166,0.12),transparent_28%),linear-gradient(180deg,rgba(255,255,255,0.95),rgba(236,253,245,0.52))]">
       <div className="mx-auto flex min-h-screen max-w-[1600px]">
         <aside className="hidden w-72 flex-col border-r border-border/70 bg-white/75 px-5 py-6 backdrop-blur-xl lg:flex">
-          <div className="flex items-center gap-3 px-2 pb-8">
+          <Link to="/app" className="flex items-center gap-3 px-2 pb-8 transition hover:opacity-90">
             <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-gradient-to-br from-teal-600 to-cyan-500 text-white shadow-soft">
-              <Sparkles className="h-5 w-5" />
+              <Pill className="h-5 w-5" />
             </div>
             <span className="font-sans text-xl font-extrabold tracking-tight text-teal-800">
               Medi<span className="text-teal-600">Pulse</span>
             </span>
-          </div>
+          </Link>
 
           <nav className="flex-1 space-y-2">
             {dashboardLinks.map((link) => {
@@ -111,10 +111,21 @@ export function AppShell() {
           <header className="sticky top-0 z-30 border-b border-border/70 bg-white/80 backdrop-blur-xl">
             <div className="flex items-center justify-between gap-4 px-4 py-4 sm:px-6 lg:px-8">
               <div className="flex items-center gap-3">
-                <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-gradient-to-br from-teal-500 to-cyan-400 text-white shadow-soft lg:hidden">
-                  <ShieldPlus className="h-5 w-5" />
-                </div>
-                <h1 className="font-display text-2xl font-bold text-slate-900">{routeTitles[location.pathname] ?? 'Home'}</h1>
+                {/* MediPulse logo — only visible on mobile (sidebar hidden on lg) */}
+                <Link
+                  to="/app"
+                  className="flex items-center gap-2 transition hover:opacity-90 lg:hidden"
+                  aria-label="Go to dashboard"
+                >
+                  <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-teal-600 to-cyan-500 text-white shadow-soft">
+                    <Pill className="h-4 w-4" />
+                  </div>
+                  <span className="font-sans text-lg font-extrabold tracking-tight text-teal-800">
+                    Medi<span className="text-teal-600">Pulse</span>
+                  </span>
+                </Link>
+                {/* Page title — hidden on mobile to avoid crowding with logo, shown on lg+ */}
+                <h1 className="hidden font-display text-2xl font-bold text-slate-900 lg:block">{routeTitles[location.pathname] ?? 'Home'}</h1>
               </div>
 
               <div className="flex items-center gap-3">
