@@ -31,20 +31,43 @@ let _hydrationStarted = false;
 
 // ── Status labels shown progressively during session restore ─────────────────
 const STATUS_LABELS = [
-  { after: 0,     text: 'Restoring your secure session…' },
-  { after: 4_000, text: 'Connecting to server…' },
-  { after: 9_000, text: 'Server is waking up, this may take a moment…' },
-  { after: 14_000, text: 'Still connecting — almost there…' },
+  { after: 0,      text: 'Restoring your secure session…' },
+  { after: 4_000,  text: 'Connecting to server…' },
+  { after: 9_000,  text: 'Server is waking up, this may take a moment…' },
+  { after: 14_000, text: 'Still connecting — retrying once more…' },
 ];
+
+// ── Utility: sleep for N milliseconds ────────────────────────────────────────
+function sleep(ms: number) {
+  return new Promise<void>((resolve) => window.setTimeout(resolve, ms));
+}
+
+// ── fetchWithRetry ────────────────────────────────────────────────────────────
+/**
+ * Calls `fn` once. If it throws, waits `retryDelayMs` then calls it one more
+ * time. If the second attempt also throws, the error propagates to the caller.
+ * This shields against transient backend cold-start errors without silently
+ * hiding genuine auth failures.
+ */
+async function fetchWithRetry<T>(fn: () => Promise<T>, retryDelayMs = 3_000): Promise<T> {
+  try {
+    return await fn();
+  } catch (firstError) {
+    // Wait for the retry delay, then try once more.
+    await sleep(retryDelayMs);
+    // If this also throws, it propagates — caller decides what to do.
+    return await fn();
+  }
+}
 
 // ── AuthBootstrap ─────────────────────────────────────────────────────────────
 function AuthBootstrap() {
-  const { accessToken, refreshToken, authReady, setUser, clearSession, setAuthReady } = useAuthStore();
+  const { authReady, setUser, clearSession, setAuthReady } = useAuthStore();
   const { setProfile, setProfileLoaded } = useProfileStore();
 
   // Status text shown while the spinner is visible
   const [statusText, setStatusText] = useState(STATUS_LABELS[0].text);
-  // Whether the safety-timeout fired (backend unreachable)
+  // Whether the safety-timeout fired (backend unreachable after retry)
   const [timedOut, setTimedOut] = useState(false);
 
   const timersRef = useRef<number[]>([]);
@@ -54,15 +77,28 @@ function AuthBootstrap() {
     if (_hydrationStarted) return;
     _hydrationStarted = true;
 
-    // ── Fast-path: no tokens stored → ready immediately ───────────────────────
-    // We read from the store AFTER Zustand-persist has rehydrated from
-    // localStorage. By the time the first useEffect fires, the persist
-    // middleware has already synchronously restored state, so this read is safe.
-    const { accessToken: storedAccess, refreshToken: storedRefresh } =
-      useAuthStore.getState();
+    // ── Read persisted state synchronously ───────────────────────────────────
+    // Zustand-persist restores localStorage state before the first useEffect,
+    // so this read is always up-to-date.
+    const {
+      accessToken: storedAccess,
+      refreshToken: storedRefresh,
+      rememberMe,
+    } = useAuthStore.getState();
 
+    // ── Fast-path A: No tokens stored ────────────────────────────────────────
+    // Nothing to restore — unblock the UI immediately.
     if (!storedAccess && !storedRefresh) {
       setAuthReady(true);
+      setProfileLoaded(true);
+      return;
+    }
+
+    // ── Fast-path B: Tokens exist but "Keep me signed in" is off ────────────
+    // The user explicitly chose not to persist across browser restarts.
+    // Clear the stored tokens and go straight to the login screen.
+    if (!rememberMe) {
+      clearSession();
       setProfileLoaded(true);
       return;
     }
@@ -74,17 +110,20 @@ function AuthBootstrap() {
     });
 
     // ── Hard safety timeout ───────────────────────────────────────────────────
-    // If the backend never responds (Render cold-boot > 30 s, network down,
-    // etc.) unblock the UI so the user isn't stuck forever.
+    // If the backend never responds even after the retry (Render cold-boot
+    // > 30 s, network down, etc.) unblock the UI and show a fallback message.
+    // We do NOT clear the session here — the tokens may still be valid and the
+    // user can retry from the landing page without losing their session.
     const safetyId = window.setTimeout(() => {
       const state = useAuthStore.getState();
       if (!state.authReady) {
         setTimedOut(true);
-        state.clearSession();
+        // Mark auth as ready so the UI unblocks, but preserve tokens so the
+        // user can try again without re-entering credentials.
         setAuthReady(true);
         setProfileLoaded(true);
       }
-    }, 20_000);
+    }, 25_000);
     timersRef.current.push(safetyId);
 
     function clearAllTimers() {
@@ -92,30 +131,34 @@ function AuthBootstrap() {
       timersRef.current = [];
     }
 
-    // ── Hydration ─────────────────────────────────────────────────────────────
+    // ── Hydration with retry ──────────────────────────────────────────────────
     async function hydrate() {
-      // Step 1 — Restore user. setAuthReady fires in finally so the spinner
-      //          hides as soon as we know whether the session is valid or not,
-      //          without waiting for the profile fetch.
+      // ── Step 1: Restore user identity ────────────────────────────────────
+      // fetchWithRetry gives the backend one cold-start grace period (3 s)
+      // before treating a failure as a genuine expired-token error.
       try {
-        const user = await getCurrentUser();
+        const user = await fetchWithRetry(() => getCurrentUser());
         setUser(user);
       } catch {
-        // Token expired / server error → clear and show login
+        // Both attempts failed → token is genuinely expired or invalid.
+        // Clear the session and redirect to login.
         clearSession();
         toast.info('Your session expired. Please sign in again.');
       } finally {
-        // Always unblock the main UI here.
+        // Always unblock the main UI here, regardless of auth outcome.
         clearAllTimers();
         setAuthReady(true);
       }
 
-      // Step 2 — Fetch profile (non-blocking for auth-ready signal).
+      // ── Step 2: Restore profile (non-blocking for auth-ready signal) ──────
+      // The profile store is now persisted, so the cached value is already
+      // visible to components. This fetch refreshes the cache for the session.
       try {
-        const profile = await getProfile();
+        const profile = await fetchWithRetry(() => getProfile());
         setProfile(profile);
       } catch {
-        setProfile(null);
+        // Profile fetch failed both attempts — keep the cached value from the
+        // persist store. Do NOT set it to null so the UI doesn't blank out.
       } finally {
         setProfileLoaded(true);
       }
@@ -135,27 +178,31 @@ function AuthBootstrap() {
   return (
     <div className="flex min-h-screen flex-col items-center justify-center bg-background text-foreground gap-6 px-4">
       {timedOut ? (
-        /* Timed-out state — shown briefly before clearSession triggers authReady */
+        /* Timed-out state — shown briefly before setAuthReady(true) triggers */
         <div className="flex flex-col items-center gap-4 text-center">
-          <div className="flex h-14 w-14 items-center justify-center rounded-full border border-rose-200 bg-rose-50">
-            <WifiOff className="h-6 w-6 text-rose-500" />
+          <div className="flex h-14 w-14 items-center justify-center rounded-full border border-amber-200 bg-amber-50">
+            <WifiOff className="h-6 w-6 text-amber-500" />
           </div>
-          <p className="text-sm font-medium text-slate-700">Could not reach the server.</p>
-          <p className="text-xs text-slate-500">Redirecting to login…</p>
+          <p className="text-sm font-medium text-slate-700">
+            Server is taking longer than expected.
+          </p>
+          <p className="text-xs text-slate-500">
+            Your session is preserved — reload the page to try again.
+          </p>
         </div>
       ) : (
         /* Normal loading state with progressive messages */
         <div className="flex flex-col items-center gap-5 text-center">
-          {/* Animated spinner */}
-          <div className="relative flex h-14 w-14 items-center justify-center">
+          {/* Animated logo + spinner */}
+          <div className="relative flex h-16 w-16 items-center justify-center">
             <div className="absolute inset-0 rounded-full border-2 border-teal-100" />
             <div className="absolute inset-0 animate-spin rounded-full border-2 border-transparent border-t-teal-500" />
-            <ShieldCheck className="h-6 w-6 text-teal-600" />
+            <ShieldCheck className="h-7 w-7 text-teal-600" />
           </div>
 
           {/* Status text — animates between messages */}
           <div className="space-y-1">
-            <p className="text-sm font-medium text-slate-700 transition-all duration-500">
+            <p className="text-sm font-semibold text-slate-700 transition-all duration-500">
               {statusText}
             </p>
             <p className="text-xs text-slate-400">

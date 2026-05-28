@@ -136,7 +136,10 @@ export function AuthPage() {
   const navigate = useNavigate();
   const setSession = useAuthStore((state) => state.setSession);
   const setUser = useAuthStore((state) => state.setUser);
+  const setRememberMe = useAuthStore((state) => state.setRememberMe);
   const [mode, setMode] = useState<'login' | 'register'>('login');
+  // Local checkbox state — defaults to true (keep signed in)
+  const [rememberMe, setRememberMeLocal] = useState(true);
 
   const loginForm = useForm<LoginValues>({
     resolver: zodResolver(loginSchema),
@@ -155,7 +158,10 @@ export function AuthPage() {
       setSession(session, session.user);
       const user = await getCurrentUser();
       setUser(user);
-      toast.success('Signed in successfully.');
+      // Write the remember-me preference BEFORE navigating so AuthBootstrap
+      // reads the correct value on the very next page load.
+      setRememberMe(rememberMe);
+      toast.success(rememberMe ? 'Signed in. Session will be remembered.' : 'Signed in. Session ends when you close the browser.');
       navigate('/app');
     } catch (error) {
       toast.error(getApiErrorMessage(error));
@@ -173,6 +179,8 @@ export function AuthPage() {
       setSession(session, session.user);
       const user = await getCurrentUser();
       setUser(user);
+      // New accounts always remember the session — user can opt out from settings.
+      setRememberMe(true);
       toast.success('Account created. Welcome!');
       navigate('/app');
     } catch (error) {
@@ -267,6 +275,24 @@ export function AuthPage() {
                   <p className="text-sm text-rose-600">{loginForm.formState.errors.password.message}</p>
                 )}
               </div>
+
+              {/* Keep me signed in */}
+              <label
+                htmlFor="login-remember"
+                className="flex cursor-pointer items-center gap-2.5 rounded-xl border border-border/60 bg-slate-50 px-3 py-2.5 text-sm transition hover:bg-teal-50/40"
+              >
+                <input
+                  id="login-remember"
+                  type="checkbox"
+                  checked={rememberMe}
+                  onChange={(e) => setRememberMeLocal(e.target.checked)}
+                  className="h-4 w-4 rounded accent-teal-600 cursor-pointer"
+                />
+                <span className="font-medium text-slate-700">Keep me signed in</span>
+                <span className="ml-auto text-xs text-slate-400">
+                  {rememberMe ? 'Session persists across restarts' : 'Session ends on browser close'}
+                </span>
+              </label>
 
               <Button
                 type="submit"

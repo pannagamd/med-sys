@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { persist } from 'zustand/middleware';
 
 import type { HealthProfile } from '@/types/api';
 
@@ -29,9 +30,26 @@ interface ProfileState {
   setProfileLoaded: (loaded: boolean) => void;
 }
 
-export const useProfileStore = create<ProfileState>()((set) => ({
-  profile: null,
-  profileLoaded: false,
-  setProfile: (profile) => set({ profile }),
-  setProfileLoaded: (loaded) => set({ profileLoaded: loaded }),
-}));
+export const useProfileStore = create<ProfileState>()(
+  persist(
+    (set) => ({
+      profile: null,
+      // profileLoaded starts as false on every page load — it is set to true
+      // only after AuthBootstrap finishes the API fetch (success or failure).
+      // Persisting `profile` gives an instant cache hit; profileLoaded signals
+      // that the authoritative API response has been received this session.
+      profileLoaded: false,
+      setProfile: (profile) => set({ profile }),
+      setProfileLoaded: (loaded) => set({ profileLoaded: loaded }),
+    }),
+    {
+      name: 'medipulse-profile',
+      // Only persist the profile data itself — NOT profileLoaded.
+      // profileLoaded must always restart as false so guards know whether the
+      // API has confirmed the cached data in the current session.
+      partialize: (state) => ({
+        profile: state.profile,
+      }),
+    },
+  ),
+);
