@@ -36,7 +36,7 @@ class Settings(BaseSettings):
     rate_limit_requests: int = 120
     rate_limit_window_seconds: int = 60
     max_upload_bytes: int = 50 * 1024 * 1024
-    seed_admin_phone: str = "+919876543210"
+    seed_admin_phone: str = "+919876543211"
     seed_admin_full_name: str = "MediPulse Admin"
     seed_admin_password: str = "MediPulse@2024"
 

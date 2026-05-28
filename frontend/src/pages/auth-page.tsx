@@ -110,7 +110,7 @@ function IndianPhoneInput({
           inputMode="numeric"
           maxLength={10}
           autoComplete="tel-national"
-          placeholder="9876543210"
+          placeholder="9876543211"
           value={value}
           onChange={handleInput}
           onKeyDown={handleKeyDown}

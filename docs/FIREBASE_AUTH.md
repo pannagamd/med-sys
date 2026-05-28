@@ -38,7 +38,7 @@ FIREBASE_CREDENTIALS_PATH=./firebase-service-account.json
 # Or inline JSON (single line):
 # FIREBASE_CREDENTIALS_JSON={"type":"service_account",...}
 
-SEED_ADMIN_PHONE=+919876543210
+SEED_ADMIN_PHONE=+919876543211
 SEED_ADMIN_FULL_NAME=MediPulse Admin
 ```
 
