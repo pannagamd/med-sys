@@ -56,21 +56,46 @@ DEFAULT_SYMPTOM_RULES = [
 
 
 def seed_admin(db: Session) -> User:
-    user = db.scalar(select(User).where(User.phone_number == settings.seed_admin_phone))
-    if user:
-        if not user.is_admin:
-            user.is_admin = True
-        if not user.hashed_password:
-            user.hashed_password = hash_password(settings.seed_admin_password)
-        return user
+    """
+    Ensure exactly one admin user exists with the credentials from settings.
 
-    user = User(
-        phone_number=settings.seed_admin_phone,
-        full_name=settings.seed_admin_full_name,
-        is_admin=True,
-        hashed_password=hash_password(settings.seed_admin_password),
-    )
-    db.add(user)
+    - If the admin exists at the configured phone: sync name + password always
+      (so .env credential changes apply on the next seed run).
+    - If not: create it.
+    - In both cases: demote any other admin accounts (stale/ghost records).
+    """
+    target_phone = settings.seed_admin_phone
+
+    # ── Upsert the canonical admin ────────────────────────────────────────────
+    user = db.scalar(select(User).where(User.phone_number == target_phone))
+    if user:
+        user.is_admin = True
+        user.full_name = settings.seed_admin_full_name
+        # Always re-hash: a credential change in .env is applied automatically.
+        user.hashed_password = hash_password(settings.seed_admin_password)
+        logger.info("seed_admin: synced existing admin phone=%s", target_phone)
+    else:
+        user = User(
+            phone_number=target_phone,
+            full_name=settings.seed_admin_full_name,
+            is_admin=True,
+            hashed_password=hash_password(settings.seed_admin_password),
+        )
+        db.add(user)
+        logger.info("seed_admin: created new admin phone=%s", target_phone)
+
+    # ── Always demote any other admins (stale from previous seed runs) ────────
+    stale_admins = db.scalars(
+        select(User).where(User.is_admin == True, User.phone_number != target_phone)  # noqa: E712
+    ).all()
+    for stale in stale_admins:
+        stale.is_admin = False
+        logger.warning(
+            "seed_admin: demoted stale admin phone=%s name=%s",
+            stale.phone_number,
+            stale.full_name,
+        )
+
     return user
 
 
