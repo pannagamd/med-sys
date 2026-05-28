@@ -50,7 +50,7 @@ print()
 
 # 2. Login
 print('=== TEST 2: Auth Login ===')
-s, d = post('/api/v1/auth/login', {'username': '+15555550100', 'password': 'admin123'})
+s, d = post('/api/v1/auth/login', {'username': '+919876543210', 'password': 'MediPulse@2024'})
 check('status 200', s == 200, str(s) + ': ' + str(d))
 token = d.get('access_token')
 check('access_token present', bool(token))

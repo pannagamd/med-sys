@@ -51,9 +51,9 @@ def user(db: Session) -> User:
 @pytest.fixture()
 def admin(db: Session) -> User:
     test_admin = User(
-        phone_number="+15555550100",
+        phone_number="+919876543210",
         firebase_uid="firebase-admin-1",
-        full_name="Admin User",
+        full_name="MediPulse Admin",
         is_admin=True,
     )
     db.add(test_admin)

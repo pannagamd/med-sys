@@ -5,7 +5,7 @@ import requests
 import json
 
 EMULATOR_HOST = "http://127.0.0.1:9099"
-PHONE = "+15555550100"
+PHONE = "+919876543210"
 OTP_CODE = "123456"
 
 def register_test_phone():

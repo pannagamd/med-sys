@@ -48,7 +48,7 @@ Copy `.env.example` to `.env` and set these before deploying:
 |----------|----------|-------------|
 | `DATABASE_URL` | ✅ | PostgreSQL connection string. Render provides this automatically. |
 | `SECRET_KEY` | ✅ | JWT signing key — use a long random string in production |
-| `SEED_ADMIN_PHONE` | ✅ | Admin account phone (E.164 format, e.g. `+15555550100`) |
+| `SEED_ADMIN_PHONE` | ✅ | Admin account phone (E.164 Indian format, e.g. `+919876543210`) |
 | `SEED_ADMIN_PASSWORD` | ✅ | Admin account password (min 6 chars) |
 | `SEED_ADMIN_FULL_NAME` | optional | Display name for admin |
 | `CORS_ORIGINS` | ✅ | Comma-separated list of allowed frontend origins |
@@ -133,8 +133,8 @@ docker build -t smart-drug-safety .
 docker run -p 8000:8000 \
   -e DATABASE_URL="postgresql+psycopg://user:pass@host:5432/dbname" \
   -e SECRET_KEY="your-secret-key" \
-  -e SEED_ADMIN_PHONE="+15555550100" \
-  -e SEED_ADMIN_PASSWORD="admin123" \
+  -e SEED_ADMIN_PHONE="+919876543210" \
+  -e SEED_ADMIN_PASSWORD="MediPulse@2024" \
   smart-drug-safety
 ```
 
@@ -247,6 +247,6 @@ Use after every production deploy:
 | `/health` returns `status: degraded` | Seed didn't run | Check startup logs; run seed scripts manually |
 | Interaction check always returns `unknown` | Interactions table empty | Run `python scripts/seed_interactions.py` |
 | `KeyError: 'high'` in logs | Old code before Phase 4 fix | Redeploy latest code |
-| `422 Unprocessable Entity` on login | Using `phone_number` field instead of `username` | Use `{"username": "+15555550100", "password": "..."}` |
+| `422 Unprocessable Entity` on login | Using `phone_number` field instead of `username` | Use `{"username": "+919876543210", "password": "..."}` |
 | DB empty after Render redeploy | Render free-tier DB resets | Add `DATABASE_URL` env var pointing to persistent PostgreSQL |
 | `checkfordata/` not found in container | Missing COPY in Dockerfile | Ensure `COPY checkfordata ./checkfordata` is in Dockerfile |

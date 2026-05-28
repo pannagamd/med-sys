@@ -117,13 +117,6 @@ function IndianPhoneInput({
           onBlur={onBlur}
           className="flex-1 bg-transparent px-3 text-sm outline-none placeholder:text-muted-foreground"
         />
-
-        {/* Character counter */}
-        <div className="flex shrink-0 items-center pr-3">
-          <span className={`text-xs tabular-nums ${value.length === 10 ? 'text-teal-600 font-semibold' : 'text-muted-foreground'}`}>
-            {value.length}/10
-          </span>
-        </div>
       </div>
       {error && <p className="text-sm text-rose-600">{error}</p>}
     </div>

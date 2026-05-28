@@ -9,9 +9,9 @@ from firebase_admin import auth
 
 try:
     firebase_admin.initialize_app()
-    user = auth.create_user(phone_number='+15555550100')
+    user = auth.create_user(phone_number='+919876543210')
     print(f'✅ Test user created successfully!')
-    print(f'   Phone: +15555550100')
+    print(f'   Phone: +919876543210')
     print(f'   UID: {user.uid}')
 except firebase_admin.exceptions.AlreadyExistsError:
     print('✅ Test user already exists')
